@@ -1,0 +1,74 @@
+{
+    "name": "ksfraser/ksf-calendar",
+    "description": "Unified calendar system - aggregates PM tasks, CRM activities, HRM time tracking, client dates. iCal import/export, multi-calendar filter, FullCalendar.js ready. Replicates/replaces SuiteCRM, vTiger, WebCalendar calendar views.",
+    "type": "library",
+    "license": "GPL-3.0",
+    "keywords": [
+        "calendar",
+        "ical",
+        "icalendar",
+        "fullcalendar",
+        "dotproject",
+        "suitecrm",
+        "vtiger",
+        "frontaccounting",
+        "weberp",
+        "ksf"
+    ],
+    "authors": [
+        {
+            "name": "KSFII Development Team",
+            "email": "dev@ksfii.org"
+        }
+    ],
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "require": {
+        "php": ">=8.0",
+        "psr/log": "^3.0",
+        "psr/event-dispatcher": "^1.0",
+        "psr/container": "^2.0",
+        "ksfraser/ksf-exceptions": "^1.0",
+        "ksfraser/ksf-traits": "^1.0",
+        "ksfraser/ksf-schema-manager": "^1.0",
+        "ksfraser/ksf-validation": "^1.0",
+        "doctrine/dbal": "^3.0",
+        "eluceo/ical": "^2.0",
+        "craigk5n/php-icalendar-core": "^1.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0",
+        "phpdocumentor/phpdocumentor": "^3.0",
+        "phpstan/phpstan": "^1.0",
+        "squizlabs/php_codesniffer": "^3.0",
+        "ksfraser/famock": "^1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Ksfraser\\Calendar\\": "src/Ksfraser/Calendar/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Ksfraser\\Calendar\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit --colors=always",
+        "test-coverage": "phpunit --coverage-html coverage",
+        "phpdoc": "phpdocumentor",
+        "phpstan": "phpstan analyse src --level=8",
+        "phpcs": "phpcs --standard=PSR12 src tests",
+        "ci": ["@phpstan", "@phpcs", "@test"]
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://packagist.org",
+            "canonical": true
+        }
+    ]
+}
