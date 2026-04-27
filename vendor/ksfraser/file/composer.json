@@ -1,0 +1,32 @@
+{
+  "name": "ksfraser/file",
+  "description": "File IO helpers with format-aware readers/writers (plus legacy compatibility)",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": ">=7.3",
+    "symfony/filesystem": "^5.4",
+    "league/csv": "^9.0",
+    "guzzlehttp/guzzle": "^7.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.6"
+  },
+  "autoload": {
+    "psr-4": {
+      "Ksfraser\\File\\": "src/Ksfraser/File/"
+    },
+    "classmap": [
+      "src/Ksfraser/FileLegacy/"
+    ]
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Ksfraser\\File\\Tests\\": "tests/",
+      "Ksfraser\\FileLegacy\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "@php vendor/bin/phpunit"
+  }
+}

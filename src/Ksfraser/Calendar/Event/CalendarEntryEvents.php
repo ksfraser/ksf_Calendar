@@ -10,9 +10,9 @@ declare(strict_types=1);
 namespace Ksfraser\Calendar\Event;
 
 use Ksfraser\Calendar\Entity\CalendarEntry;
-use Psr\EventDispatcher\Stoppable;
+use Psr\EventDispatcher\StoppableEventInterface;
 
-class CalendarEntryCreatedEvent implements Stoppable
+class CalendarEntryCreatedEvent implements StoppableEventInterface
 {
     private bool $propagationStopped = false;
 
@@ -37,7 +37,7 @@ class CalendarEntryCreatedEvent implements Stoppable
     }
 }
 
-class CalendarEntryUpdatedEvent implements Stoppable
+class CalendarEntryUpdatedEvent implements StoppableEventInterface
 {
     private bool $propagationStopped = false;
 
@@ -62,7 +62,7 @@ class CalendarEntryUpdatedEvent implements Stoppable
     }
 }
 
-class CalendarEntryDeletedEvent implements Stoppable
+class CalendarEntryDeletedEvent implements StoppableEventInterface
 {
     private bool $propagationStopped = false;
 
