@@ -43,7 +43,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Ksfraser\\Calendar\\": "src/Ksfraser/Calendar/"
+            "Ksfraser\\": "src/Ksfraser/"
         },
         "classmap": [
             "src/Ksfraser/Calendar/Event/CalendarEntryEvents.php"
@@ -51,7 +51,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Ksfraser\\Calendar\\Tests\\": "tests/"
+            "Ksfraser\\Tests\\": "tests/"
         }
     },
     "scripts": {
@@ -60,7 +60,11 @@
         "phpdoc": "phpdocumentor",
         "phpstan": "phpstan analyse src --level=8",
         "phpcs": "phpcs --standard=PSR12 src tests",
-        "ci": ["@phpstan", "@phpcs", "@test"]
+        "ci": [
+            "@phpstan",
+            "@phpcs",
+            "@test"
+        ]
     },
     "config": {
         "sort-packages": true
