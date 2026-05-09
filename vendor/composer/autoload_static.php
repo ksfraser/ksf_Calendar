@@ -44,13 +44,13 @@ class ComposerStaticInita72433c49d128b0e203ac710ab42cc63
         'K' => 
         array (
             'Ksfraser\\Validation\\' => 20,
+            'Ksfraser\\Tests\\' => 15,
             'Ksfraser\\SchemaManager\\' => 23,
             'Ksfraser\\ModulesDAO\\' => 20,
             'Ksfraser\\GenericInterface\\' => 26,
             'Ksfraser\\File\\' => 14,
             'Ksfraser\\Exceptions\\' => 20,
-            'Ksfraser\\Calendar\\Tests\\' => 24,
-            'Ksfraser\\Calendar\\' => 18,
+            'Ksfraser\\' => 9,
         ),
         'G' => 
         array (
@@ -125,6 +125,10 @@ class ComposerStaticInita72433c49d128b0e203ac710ab42cc63
         array (
             0 => __DIR__ . '/..' . '/ksfraser/validation/src',
         ),
+        'Ksfraser\\Tests\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/tests',
+        ),
         'Ksfraser\\SchemaManager\\' => 
         array (
             0 => __DIR__ . '/..' . '/ksfraser/ksf-schemamanager/src/Ksfraser/SchemaManager',
@@ -145,13 +149,9 @@ class ComposerStaticInita72433c49d128b0e203ac710ab42cc63
         array (
             0 => __DIR__ . '/..' . '/ksfraser/exceptions/src/Ksfraser/Exceptions',
         ),
-        'Ksfraser\\Calendar\\Tests\\' => 
+        'Ksfraser\\' => 
         array (
-            0 => __DIR__ . '/../..' . '/tests',
-        ),
-        'Ksfraser\\Calendar\\' => 
-        array (
-            0 => __DIR__ . '/../..' . '/src/Ksfraser/Calendar',
+            0 => __DIR__ . '/../..' . '/src/Ksfraser',
         ),
         'GuzzleHttp\\Psr7\\' => 
         array (

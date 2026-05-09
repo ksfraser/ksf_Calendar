@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "7f2f19bbe976ebbe9b7a9e885c7c57f1",
+    "content-hash": "656f786bb70ab01c2a5ad773f9f2184c",
     "packages": [
         {
             "name": "doctrine/dbal",
@@ -651,20 +651,23 @@
         },
         {
             "name": "ksfraser/exceptions",
-            "version": "v1.2.0",
+            "version": "dev-refactor/add-module-exceptions",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ksfraser/Exceptions.git",
-                "reference": "54ec3f015e1b69f0caf5b544264d0c02aa579425"
+                "reference": "df682b4904d875974472af0073a01c60dac01a82"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ksfraser/Exceptions/zipball/54ec3f015e1b69f0caf5b544264d0c02aa579425",
-                "reference": "54ec3f015e1b69f0caf5b544264d0c02aa579425",
+                "url": "https://api.github.com/repos/ksfraser/Exceptions/zipball/df682b4904d875974472af0073a01c60dac01a82",
+                "reference": "df682b4904d875974472af0073a01c60dac01a82",
                 "shasum": ""
             },
             "require": {
                 "php": ">=7.3"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^9.0"
             },
             "type": "library",
             "autoload": {
@@ -685,9 +688,9 @@
             "description": "A comprehensive exception library for ksfraser projects with factory methods for domain-specific errors.",
             "support": {
                 "issues": "https://github.com/ksfraser/Exceptions/issues",
-                "source": "https://github.com/ksfraser/Exceptions/tree/v1.2.0"
+                "source": "https://github.com/ksfraser/Exceptions/tree/refactor/add-module-exceptions"
             },
-            "time": "2026-04-04T16:19:23+00:00"
+            "time": "2026-05-09T16:54:34+00:00"
         },
         {
             "name": "ksfraser/file",
@@ -3584,9 +3587,18 @@
             "time": "2025-11-17T20:03:58+00:00"
         }
     ],
-    "aliases": [],
+    "aliases": [
+        {
+            "package": "ksfraser/exceptions",
+            "version": "dev-refactor/add-module-exceptions",
+            "alias": "1.3.0",
+            "alias_normalized": "1.3.0.0"
+        }
+    ],
     "minimum-stability": "dev",
-    "stability-flags": [],
+    "stability-flags": {
+        "ksfraser/exceptions": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

@@ -27,7 +27,7 @@
         "php": ">=8.0",
         "doctrine/dbal": "^3.0",
         "eluceo/ical": "^2.0",
-        "ksfraser/exceptions": "*",
+        "ksfraser/exceptions": "dev-refactor/add-module-exceptions as 1.3.0",
         "ksfraser/file": "*",
         "ksfraser/genericinterface": "*",
         "ksfraser/ksf-schemamanager": "*",
@@ -74,6 +74,10 @@
             "type": "composer",
             "url": "https://packagist.org",
             "canonical": true
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/ksfraser/Exceptions"
         },
         {
             "type": "vcs",

@@ -3,7 +3,7 @@
         'name' => 'ksfraser/ksf-calendar',
         'pretty_version' => 'dev-master',
         'version' => 'dev-master',
-        'reference' => '04ef9681f094502d779cad09cff4f42e6dd96581',
+        'reference' => '8ba39543c5cfe269293e49c497c314cf51c8cdf3',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -74,12 +74,14 @@
             'dev_requirement' => false,
         ),
         'ksfraser/exceptions' => array(
-            'pretty_version' => 'v1.2.0',
-            'version' => '1.2.0.0',
-            'reference' => '54ec3f015e1b69f0caf5b544264d0c02aa579425',
+            'pretty_version' => 'dev-refactor/add-module-exceptions',
+            'version' => 'dev-refactor/add-module-exceptions',
+            'reference' => 'df682b4904d875974472af0073a01c60dac01a82',
             'type' => 'library',
             'install_path' => __DIR__ . '/../ksfraser/exceptions',
-            'aliases' => array(),
+            'aliases' => array(
+                0 => '1.3.0',
+            ),
             'dev_requirement' => false,
         ),
         'ksfraser/file' => array(
@@ -105,7 +107,7 @@
         'ksfraser/ksf-calendar' => array(
             'pretty_version' => 'dev-master',
             'version' => 'dev-master',
-            'reference' => '04ef9681f094502d779cad09cff4f42e6dd96581',
+            'reference' => '8ba39543c5cfe269293e49c497c314cf51c8cdf3',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
