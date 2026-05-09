@@ -29,6 +29,46 @@ ksf_Calendar/                   # Business logic (framework-agnostic)
 
 ---
 
+## Legacy Migration: Inheritance → Traits
+
+### The Problem
+Legacy modules used deep inheritance with magic methods for type validation and event notifications.
+
+### The Solution
+Replace inheritance with trait composition:
+
+```php
+// OLD: Inheritance with magic methods
+class CalendarEvent extends BaseEntity {
+    public function __set($k, $v) {
+        validate_type($k, $v);
+        $this->$k = $v;
+        $this->notify("NOTIFY_SET_{$k}", $v);
+    }
+}
+
+// NEW: Trait composition
+class CalendarEvent {
+    use ValidatableTrait;      // Type validation
+    use EventEmitterTrait;     // Event notifications
+    use EntityStateTrait;      // State tracking
+    use TimestampTrait;       // Timestamps
+    
+    private ?string $title = null;
+    
+    public function setTitle(string $title): self
+    {
+        $this->assertNotEmptyString($title, 'title');
+        $this->title = $title;
+        $this->markModified();
+        $this->emit('event.title.changed', $title);
+        return $this;
+    }
+}
+```
+
+---
+
 ## Dependency Management
 
 ### Required Libraries
