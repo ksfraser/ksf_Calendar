@@ -84,28 +84,28 @@ Each source has filters for which source_types to include.
 
 ### 5. Database Schema (fa_cal_ prefix)
 
-```
-fa_cal_entries
-  - id (PK, auto)
-  - source, source_id, source_type
-  - title, description
-  - start_date, end_date, all_day, timezone
-  - location, assigned_to, user_id
-  - customer_id, project_id, task_id, contact_id
-  - status, priority, category
-  - reminder, reminder_minutes, color
-  - private, recurrence_rule, recurrence_id
-  - inactive, created_at, updated_at
+---
 
-fa_cal_sources
-  - id (PK, auto)
-  - name, type, source, url
-  - color, enabled
-  - show_events, show_tasks, show_calls, show_meetings
-  - show_client_dates, show_birthdays, show_anniversaries, show_renewals, show_time_tracking
-  - visibility, assigned_to, user_id, apikey
-  - last_sync, inactive, created_at
-```
+## 6. Composer Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| ksfraser/exceptions | ^1.3 | Exception hierarchy (Domain, Utility, Calendar-specific) |
+| ksfraser/traits | ^1.0 | Trait library (ValidatableTrait, TimestampTrait, etc.) |
+| psr/event-dispatcher | ^2.0 | PSR-14 event dispatcher |
+| eluceo/ical | ^2.0 | iCal generation |
+| craigk5n/php-icalendar-core | ^1.0 | iCal parsing |
+
+### 6.1 Exception Usage
+
+All exceptions use `Ksfraser\Exceptions\Calendar\*` from the ksfraser/exceptions library:
+
+| Exception | Extends | Description |
+|-----------|---------|-------------|
+| `Ksfraser\Exceptions\Calendar\CalendarException` | `RuntimeException` | Base calendar exception |
+| `Ksfraser\Exceptions\Calendar\EntryNotFoundException` | `CalendarException` | Entry not found |
+| `Ksfraser\Exceptions\Calendar\SourceNotFoundException` | `CalendarException` | Source not found |
+| `Ksfraser\Exceptions\Calendar\InvalidDateRangeException` | `CalendarException` | Invalid date range |
 
 ---
 
