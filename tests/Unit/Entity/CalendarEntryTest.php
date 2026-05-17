@@ -22,11 +22,11 @@ class CalendarEntryTest extends TestCase
     {
         $this->startDate = new DateTime('2024-01-01 09:00:00');
         $this->entry = new CalendarEntry(
-            source: 'pm',
-            sourceId: 'task-1',
-            sourceType: 'task',
-            title: 'Test Task',
-            startDate: $this->startDate
+            'pm',
+            'task-1',
+            'task',
+            'Test Task',
+            $this->startDate
         );
     }
 

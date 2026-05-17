@@ -483,12 +483,12 @@ class CalendarEntry
     public static function fromArray(array $data): self
     {
         $entry = new self(
-            source: $data['source'] ?? '',
-            sourceId: $data['source_id'] ?? '',
-            sourceType: $data['source_type'] ?? '',
-            title: $data['title'] ?? '',
-            startDate: ($data['start_date'] !== null) ? new DateTime($data['start_date']) : null,
-            id: $data['id'] ?? null
+            $data['source'] ?? '',
+            $data['source_id'] ?? '',
+            $data['source_type'] ?? '',
+            $data['title'] ?? '',
+            ($data['start_date'] !== null) ? new DateTime($data['start_date']) : null,
+            $data['id'] ?? null
         );
 
         $entry->setDescription($data['description'] ?? '');
@@ -522,11 +522,11 @@ class CalendarEntry
     public static function fromPMTask(\Ksfraser\ProjectManagement\Entity\Task $task): self
     {
         $entry = new self(
-            source: self::SOURCE_PM,
-            sourceId: $task->getTaskId(),
-            sourceType: self::TYPE_TASK,
-            title: $task->getName(),
-            startDate: $task->getStartDate()
+            self::SOURCE_PM,
+            $task->getTaskId(),
+            self::TYPE_TASK,
+            $task->getName(),
+            $task->getStartDate()
         );
 
         $entry->setDescription($task->getDescription());
@@ -544,11 +544,11 @@ class CalendarEntry
     public static function fromCRMActivity(array $activity): self
     {
         $entry = new self(
-            source: self::SOURCE_CRM,
-            sourceId: (string) ($activity['id'] ?? ''),
-            sourceType: $activity['communication_type'] ?? 'activity',
-            title: $activity['subject'] ?? $activity['communication_type'] ?? 'Activity',
-            startDate: ($activity['created_at'] !== null) ? new DateTime($activity['created_at']) : null
+            self::SOURCE_CRM,
+            (string) ($activity['id'] ?? ''),
+            $activity['communication_type'] ?? 'activity',
+            $activity['subject'] ?? $activity['communication_type'] ?? 'Activity',
+            ($activity['created_at'] !== null) ? new DateTime($activity['created_at']) : null
         );
 
         $entry->setDescription($activity['message'] ?? '');
@@ -569,17 +569,18 @@ class CalendarEntry
     public static function fromRosterShift(\Ksfraser\Roster\Entity\Roster $roster): self
     {
         $entry = new self(
-            source: self::SOURCE_HRM,
-            sourceId: (string) $roster->getId(),
-            sourceType: self::TYPE_SHIFT,
-            title: $roster->getShift() . ' Shift',
-            startDate: (($roster->getDate() !== null) && ($roster->getStartTime() !== null)) 
-                ? new DateTime($roster->getDate() . ' ' . $roster->getStartTime()) 
-                : null,
-            endDate: (($roster->getDate() !== null) && ($roster->getEndTime() !== null)) 
-                ? new DateTime($roster->getDate() . ' ' . $roster->getEndTime()) 
+            self::SOURCE_HRM,
+            (string) $roster->getId(),
+            self::TYPE_SHIFT,
+            $roster->getShift() . ' Shift',
+            (($roster->getDate() !== null) && ($roster->getStartTime() !== null))
+                ? new DateTime($roster->getDate() . ' ' . $roster->getStartTime())
                 : null
         );
+
+        if (($roster->getDate() !== null) && ($roster->getEndTime() !== null)) {
+            $entry->setEndDate(new DateTime($roster->getDate() . ' ' . $roster->getEndTime()));
+        }
 
         $entry->setDescription($roster->getNotes() ?? '');
         $entry->setAssignedTo((string) $roster->getEmployeeId());
