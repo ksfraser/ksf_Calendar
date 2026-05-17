@@ -285,6 +285,34 @@ class CalendarEntryTest extends TestCase
         $this->assertSame('confirmed', CalendarEntry::STATUS_CONFIRMED);
         $this->assertSame('cancelled', CalendarEntry::STATUS_CANCELLED);
         $this->assertSame('completed', CalendarEntry::STATUS_COMPLETED);
+        $this->assertSame('no_show', CalendarEntry::STATUS_NO_SHOW);
+    }
+
+    public function testMeetingStatusConstants(): void
+    {
+        $this->assertSame('meeting_planned', CalendarEntry::STATUS_MEETING_PLANNED);
+        $this->assertSame('meeting_held', CalendarEntry::STATUS_MEETING_HELD);
+        $this->assertSame('meeting_not_held', CalendarEntry::STATUS_MEETING_NOT_HELD);
+        $this->assertSame('meeting_rescheduled', CalendarEntry::STATUS_MEETING_RESCHEDULED);
+    }
+
+    public function testCallOutcomeConstants(): void
+    {
+        $this->assertSame('call_planned', CalendarEntry::STATUS_CALL_PLANNED);
+        $this->assertSame('call_held', CalendarEntry::STATUS_CALL_HELD);
+        $this->assertSame('call_rna', CalendarEntry::STATUS_CALL_RNA);
+        $this->assertSame('call_vmail', CalendarEntry::STATUS_CALL_VMAIL);
+        $this->assertSame('call_rna_followup', CalendarEntry::STATUS_CALL_RNA_FOLLOWUP);
+        $this->assertSame('call_vmail_followup', CalendarEntry::STATUS_CALL_VMAIL_FOLLOWUP);
+    }
+
+    public function testShiftTypeConstants(): void
+    {
+        $this->assertSame('shift', CalendarEntry::TYPE_SHIFT);
+        $this->assertSame('Morning', CalendarEntry::SHIFT_MORNING);
+        $this->assertSame('Afternoon', CalendarEntry::SHIFT_AFTERNOON);
+        $this->assertSame('Night', CalendarEntry::SHIFT_NIGHT);
+        $this->assertSame('Swing', CalendarEntry::SHIFT_SWING);
     }
 
     public function testSourceConstants(): void

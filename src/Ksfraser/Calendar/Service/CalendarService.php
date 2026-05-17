@@ -263,6 +263,47 @@ class CalendarService
         return array_map(fn($row) => CalendarEntry::fromArray($row), $rows);
     }
 
+    /**
+     * Get unscheduled tasks for a user (tasks without start date)
+     *
+     * @param string $userId
+     * @return array<int, CalendarEntry>
+     */
+    public function getUnscheduledTasksForUser(string $userId): array
+    {
+        if ($this->projectService === null) {
+            return [];
+        }
+
+        $tasks = $this->projectService->getTasksByAssignee($userId);
+        $unscheduled = [];
+
+        foreach ($tasks as $task) {
+            if ($task->getStartDate() === null && $task->getStatus() !== 'Completed') {
+                $entry = CalendarEntry::fromPMTask($task);
+                $entry->setUserId($userId);
+                $unscheduled[] = $entry;
+            }
+        }
+
+        usort($unscheduled, function ($a, $b) {
+            $priorityOrder = ['high' => 3, 'medium' => 2, 'low' => 1];
+            $priorityA = $priorityOrder[$a->getPriority()] ?? 0;
+            $priorityB = $priorityOrder[$b->getPriority()] ?? 0;
+
+            if ($priorityA !== $priorityB) {
+                return $priorityB - $priorityA;
+            }
+
+            $dateA = $a->getEndDate() ? $a->getEndDate()->getTimestamp() : PHP_INT_MAX;
+            $dateB = $b->getEndDate() ? $b->getEndDate()->getTimestamp() : PHP_INT_MAX;
+
+            return $dateA - $dateB;
+        });
+
+        return $unscheduled;
+    }
+
     public function syncPMTasks(string $userId): int
     {
         if ($this->projectService === null) {
@@ -430,8 +471,8 @@ class CalendarService
             $entry->getSourceType(),
             $entry->getTitle(),
             $entry->getDescription(),
-            $entry->getStartDate()?->format('Y-m-d'),
-            $entry->getEndDate()?->format('Y-m-d'),
+            $entry->getStartDate() !== null ? $entry->getStartDate()->format('Y-m-d') : null,
+            $entry->getEndDate() !== null ? $entry->getEndDate()->format('Y-m-d') : null,
             $entry->getAllDay(),
             $entry->getTimezone(),
             $entry->getLocation(),

@@ -26,12 +26,33 @@ class CalendarEntry
     public const TYPE_RENEWAL = 'renewal';
     public const TYPE_TIMETRACKING = 'timetracking';
     public const TYPE_BLOCKED = 'blocked';
+    public const TYPE_SHIFT = 'shift';
+
+    // Shift types (for HRM integration)
+    public const SHIFT_MORNING = 'Morning';
+    public const SHIFT_AFTERNOON = 'Afternoon';
+    public const SHIFT_NIGHT = 'Night';
+    public const SHIFT_SWING = 'Swing';
 
     public const STATUS_PENDING = 'pending';
     public const STATUS_CONFIRMED = 'confirmed';
     public const STATUS_CANCELLED = 'cancelled';
     public const STATUS_COMPLETED = 'completed';
     public const STATUS_NO_SHOW = 'no_show';
+    
+    // Meeting specific statuses
+    public const STATUS_MEETING_PLANNED = 'meeting_planned';
+    public const STATUS_MEETING_HELD = 'meeting_held';
+    public const STATUS_MEETING_NOT_HELD = 'meeting_not_held';
+    public const STATUS_MEETING_RESCHEDULED = 'meeting_rescheduled';
+    
+    // Call specific statuses
+    public const STATUS_CALL_PLANNED = 'call_planned';
+    public const STATUS_CALL_HELD = 'call_held';
+    public const STATUS_CALL_RNA = 'call_rna'; // Ring No Answer
+    public const STATUS_CALL_VMAIL = 'call_vmail'; // Voicemail left
+    public const STATUS_CALL_RNA_FOLLOWUP = 'call_rna_followup';
+    public const STATUS_CALL_VMAIL_FOLLOWUP = 'call_vmail_followup';
 
     public const SOURCE_PM = 'pm';
     public const SOURCE_CRM = 'crm';
@@ -433,8 +454,8 @@ class CalendarEntry
             'source_type' => $this->sourceType,
             'title' => $this->title,
             'description' => $this->description,
-            'start_date' => $this->startDate?->format(DateTimeInterface::ATOM),
-            'end_date' => $this->endDate?->format(DateTimeInterface::ATOM),
+            'start_date' => ($this->startDate !== null ? $this->startDate->format(DateTimeInterface::ATOM) : null),
+            'end_date' => ($this->endDate !== null ? $this->endDate->format(DateTimeInterface::ATOM) : null),
             'all_day' => $this->allDay,
             'timezone' => $this->timezone,
             'location' => $this->location,
@@ -454,8 +475,8 @@ class CalendarEntry
             'recurrence_rule' => $this->recurrenceRule,
             'recurrence_id' => $this->recurrenceId,
             'inactive' => $this->inactive,
-            'created_at' => $this->createdAt?->format(DateTimeInterface::ATOM),
-            'updated_at' => $this->updatedAt?->format(DateTimeInterface::ATOM),
+            'created_at' => ($this->createdAt !== null ? $this->createdAt->format(DateTimeInterface::ATOM) : null),
+            'updated_at' => ($this->updatedAt !== null ? $this->updatedAt->format(DateTimeInterface::ATOM) : null),
         ];
     }
 
@@ -466,7 +487,7 @@ class CalendarEntry
             sourceId: $data['source_id'] ?? '',
             sourceType: $data['source_type'] ?? '',
             title: $data['title'] ?? '',
-            startDate: isset($data['start_date']) ? new DateTime($data['start_date']) : null,
+            startDate: ($data['start_date'] !== null) ? new DateTime($data['start_date']) : null,
             id: $data['id'] ?? null
         );
 
@@ -527,7 +548,7 @@ class CalendarEntry
             sourceId: (string) ($activity['id'] ?? ''),
             sourceType: $activity['communication_type'] ?? 'activity',
             title: $activity['subject'] ?? $activity['communication_type'] ?? 'Activity',
-            startDate: isset($activity['created_at']) ? new DateTime($activity['created_at']) : null
+            startDate: ($activity['created_at'] !== null) ? new DateTime($activity['created_at']) : null
         );
 
         $entry->setDescription($activity['message'] ?? '');
@@ -540,6 +561,47 @@ class CalendarEntry
             $entry->setSourceType(self::TYPE_MEETING);
         } elseif ($activity['communication_type'] === 'phone') {
             $entry->setSourceType(self::TYPE_CALL);
+        }
+
+        return $entry;
+    }
+
+    public static function fromRosterShift(\Ksfraser\Roster\Entity\Roster $roster): self
+    {
+        $entry = new self(
+            source: self::SOURCE_HRM,
+            sourceId: (string) $roster->getId(),
+            sourceType: self::TYPE_SHIFT,
+            title: $roster->getShift() . ' Shift',
+            startDate: (($roster->getDate() !== null) && ($roster->getStartTime() !== null)) 
+                ? new DateTime($roster->getDate() . ' ' . $roster->getStartTime()) 
+                : null,
+            endDate: (($roster->getDate() !== null) && ($roster->getEndTime() !== null)) 
+                ? new DateTime($roster->getDate() . ' ' . $roster->getEndTime()) 
+                : null
+        );
+
+        $entry->setDescription($roster->getNotes() ?? '');
+        $entry->setAssignedTo((string) $roster->getEmployeeId());
+        $entry->setStatus($roster->getStatus() ?? 'Scheduled');
+        $entry->setCategory('Work Shift');
+
+        // Set color based on shift type
+        switch ($roster->getShift()) {
+            case self::SHIFT_MORNING:
+                $entry->setColor('#FF9800'); // Orange
+                break;
+            case self::SHIFT_AFTERNOON:
+                $entry->setColor('#2196F3'); // Blue
+                break;
+            case self::SHIFT_NIGHT:
+                $entry->setColor('#9C27B0'); // Purple
+                break;
+            case self::SHIFT_SWING:
+                $entry->setColor('#F44336'); // Red
+                break;
+            default:
+                $entry->setColor('#607D8B'); // Grey
         }
 
         return $entry;

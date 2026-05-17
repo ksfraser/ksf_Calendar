@@ -172,8 +172,8 @@ class CalendarEntryDTO
             sourceType: $entity->getSourceType(),
             title: $entity->getTitle(),
             description: $entity->getDescription(),
-            startDate: $entity->getStartDate()?->format('c') ?? '',
-            endDate: $entity->getEndDate()?->format('c'),
+            startDate: ($entity->getStartDate() !== null ? $entity->getStartDate()->format('c') : ''),
+            endDate: ($entity->getEndDate() !== null ? $entity->getEndDate()->format('c') : ''),
             allDay: $entity->getAllDay(),
             timezone: $entity->getTimezone(),
             location: $entity->getLocation(),
@@ -194,20 +194,26 @@ class CalendarEntryDTO
             editable: !$entity->isPrivate(),
             overdue: $entity->isOverdue(),
             today: $entity->isToday(),
-            createdAt: $entity->getCreatedAt()?->format('c'),
-            updatedAt: $entity->getUpdatedAt()?->format('c')
+            createdAt: ($entity->getCreatedAt() !== null ? $entity->getCreatedAt()->format('c') : null),
+            updatedAt: ($entity->getUpdatedAt() !== null ? $entity->getUpdatedAt()->format('c') : null)
         );
     }
 
     private function getDefaultColor(): string
     {
-        return match ($this->source) {
-            'pm' => '#2196F3',
-            'crm' => '#4CAF50',
-            'hrm' => '#FF9800',
-            'client' => '#9C27B0',
-            'ical' => '#607D8B',
-            default => '#9E9E9E',
-        };
+        switch ($this->source) {
+            case 'pm':
+                return '#2196F3';
+            case 'crm':
+                return '#4CAF50';
+            case 'hrm':
+                return '#FF9800';
+            case 'client':
+                return '#9C27B0';
+            case 'ical':
+                return '#607D8B';
+            default:
+                return '#9E9E9E';
+        }
     }
 }

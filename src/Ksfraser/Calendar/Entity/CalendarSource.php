@@ -83,14 +83,20 @@ class CalendarSource
 
     private function getDefaultColor(): string
     {
-        return match ($this->source) {
-            CalendarEntry::SOURCE_PM => '#2196F3',
-            CalendarEntry::SOURCE_CRM => '#4CAF50',
-            CalendarEntry::SOURCE_HRM => '#FF9800',
-            CalendarEntry::SOURCE_CLIENT => '#9C27B0',
-            CalendarEntry::SOURCE_ICAL => '#607D8B',
-            default => '#9E9E9E',
-        };
+        switch ($this->source) {
+            case CalendarEntry::SOURCE_PM:
+                return '#2196F3';
+            case CalendarEntry::SOURCE_CRM:
+                return '#4CAF50';
+            case CalendarEntry::SOURCE_HRM:
+                return '#FF9800';
+            case CalendarEntry::SOURCE_CLIENT:
+                return '#9C27B0';
+            case CalendarEntry::SOURCE_ICAL:
+                return '#607D8B';
+            default:
+                return '#9E9E9E';
+        }
     }
 
     public function getId(): ?int

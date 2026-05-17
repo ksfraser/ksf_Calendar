@@ -329,14 +329,18 @@ class iCalService
         return true;
     }
 
-    private function mapStatusToIcal(string $status): ?string
+    private function mapStatusToIcal(string $status)
     {
-        return match ($status) {
-            CalendarEntry::STATUS_CONFIRMED => 'CONFIRMED',
-            CalendarEntry::STATUS_CANCELLED => 'CANCELLED',
-            CalendarEntry::STATUS_COMPLETED => 'COMPLETED',
-            default => null,
-        };
+        switch ($status) {
+            case CalendarEntry::STATUS_CONFIRMED:
+                return 'CONFIRMED';
+            case CalendarEntry::STATUS_CANCELLED:
+                return 'CANCELLED';
+            case CalendarEntry::STATUS_COMPLETED:
+                return 'COMPLETED';
+            default:
+                return null;
+        }
     }
 
     private function getTimezoneString(): string
