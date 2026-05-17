@@ -28,9 +28,12 @@ class iCalService
 
     private const DEFAULT_TIMEZONE = 'UTC';
 
+    private $logger;
+
     public function __construct(
-        private readonly LoggerInterface $logger
+        LoggerInterface $logger
     ) {
+        $this->logger = $logger;
     }
 
     public function exportEntries(array $entries, string $calendarName = 'KSF Calendar'): string

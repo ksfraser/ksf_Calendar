@@ -14,11 +14,13 @@ use Psr\EventDispatcher\StoppableEventInterface;
 
 class CalendarEntryCreatedEvent implements StoppableEventInterface
 {
-    private bool $propagationStopped = false;
+    private $propagationStopped = false;
+    private $entry;
 
     public function __construct(
-        private readonly CalendarEntry $entry
+        CalendarEntry $entry
     ) {
+        $this->entry = $entry;
     }
 
     public function getEntry(): CalendarEntry
@@ -39,11 +41,13 @@ class CalendarEntryCreatedEvent implements StoppableEventInterface
 
 class CalendarEntryUpdatedEvent implements StoppableEventInterface
 {
-    private bool $propagationStopped = false;
+    private $propagationStopped = false;
+    private $entry;
 
     public function __construct(
-        private readonly CalendarEntry $entry
+        CalendarEntry $entry
     ) {
+        $this->entry = $entry;
     }
 
     public function getEntry(): CalendarEntry
@@ -64,11 +68,13 @@ class CalendarEntryUpdatedEvent implements StoppableEventInterface
 
 class CalendarEntryDeletedEvent implements StoppableEventInterface
 {
-    private bool $propagationStopped = false;
+    private $propagationStopped = false;
+    private $entry;
 
     public function __construct(
-        private readonly CalendarEntry $entry
+        CalendarEntry $entry
     ) {
+        $this->entry = $entry;
     }
 
     public function getEntry(): CalendarEntry

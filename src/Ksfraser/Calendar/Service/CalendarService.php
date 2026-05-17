@@ -28,12 +28,21 @@ class CalendarService
     private const TABLE_ENTRIES = 'fa_cal_entries';
     private const TABLE_SOURCES = 'fa_cal_sources';
 
+    private $db;
+    private $events;
+    private $logger;
+    private $projectService;
+
     public function __construct(
-        private readonly DatabaseAdapterInterface $db,
-        private readonly EventDispatcherInterface $events,
-        private readonly LoggerInterface $logger,
-        private readonly ?ProjectServiceInterface $projectService = null
+        DatabaseAdapterInterface $db,
+        EventDispatcherInterface $events,
+        LoggerInterface $logger,
+        ProjectServiceInterface $projectService = null
     ) {
+        $this->db = $db;
+        $this->events = $events;
+        $this->logger = $logger;
+        $this->projectService = $projectService;
     }
 
     public function createEntry(array $data): CalendarEntry
@@ -44,12 +53,12 @@ class CalendarService
         $entryId = $this->getNextEntryId();
 
         $entry = new CalendarEntry(
-            source: $data['source'] ?? CalendarEntry::SOURCE_USER,
-            sourceId: $data['source_id'] ?? $entryId,
-            sourceType: $data['source_type'] ?? CalendarEntry::TYPE_EVENT,
-            title: $data['title'],
-            startDate: isset($data['start_date']) ? new DateTime($data['start_date']) : null,
-            id: $entryId
+            $data['source'] ?? CalendarEntry::SOURCE_USER,
+            $data['source_id'] ?? $entryId,
+            $data['source_type'] ?? CalendarEntry::TYPE_EVENT,
+            $data['title'],
+            isset($data['start_date']) ? new DateTime($data['start_date']) : null,
+            $entryId
         );
 
         if (isset($data['end_date'])) {
@@ -229,7 +238,9 @@ class CalendarService
 
         $rows = $this->db->fetchAll($sql, $params);
 
-        return array_map(fn($row) => CalendarEntry::fromArray($row), $rows);
+        return array_map(function($row) {
+            return CalendarEntry::fromArray($row);
+        }, $rows);
     }
 
     public function getEntriesForUser(string $userId, DateTime $start, DateTime $end): array
@@ -260,7 +271,9 @@ class CalendarService
                 WHERE task_id = ? AND inactive = 0 ORDER BY start_date ASC";
         $rows = $this->db->fetchAll($sql, [$taskId]);
 
-        return array_map(fn($row) => CalendarEntry::fromArray($row), $rows);
+        return array_map(function($row) {
+            return CalendarEntry::fromArray($row);
+        }, $rows);
     }
 
     /**
@@ -386,7 +399,9 @@ class CalendarService
                 ORDER BY name";
         $rows = $this->db->fetchAll($sql, [$userId]);
 
-        return array_map(fn($row) => CalendarSource::fromArray($row), $rows);
+        return array_map(function($row) {
+            return CalendarSource::fromArray($row);
+        }, $rows);
     }
 
     public function getEntryCountByDate(DateTime $date): array

@@ -1,7 +1,6 @@
 <?php
 /**
- * CalendarEntryDTO
- *
+ * CalendarEntryDTO *
  * @package Ksfraser\Calendar\DTO
  */
 
@@ -13,38 +12,99 @@ use DateTime;
 
 class CalendarEntryDTO
 {
+    private $id;
+    private $source;
+    private $sourceId;
+    private $sourceType;
+    private $title;
+    private $description;
+    private $startDate;
+    private $endDate;
+    private $allDay;
+    private $timezone;
+    private $location;
+    private $assignedTo;
+    private $userId;
+    private $customerId;
+    private $projectId;
+    private $taskId;
+    private $contactId;
+    private $status;
+    private $priority;
+    private $category;
+    private $reminder;
+    private $reminderMinutes;
+    private $color;
+    private $private;
+    private $recurrenceRule;
+    private $editable;
+    private $overdue;
+    private $today;
+    private $createdAt;
+    private $updatedAt;
+
     public function __construct(
-        private readonly ?int $id = null,
-        private readonly string $source = '',
-        private readonly string $sourceId = '',
-        private readonly string $sourceType = 'event',
-        private readonly string $title = '',
-        private readonly string $description = '',
-        private readonly string $startDate = '',
-        private readonly ?string $endDate = null,
-        private readonly string $allDay = 'no',
-        private readonly string $timezone = '',
-        private readonly string $location = '',
-        private readonly string $assignedTo = '',
-        private readonly ?string $userId = null,
-        private readonly ?string $customerId = null,
-        private readonly ?string $projectId = null,
-        private readonly ?string $taskId = null,
-        private readonly ?string $contactId = null,
-        private readonly string $status = 'pending',
-        private readonly string $priority = 'medium',
-        private readonly string $category = '',
-        private readonly bool $reminder = false,
-        private readonly ?int $reminderMinutes = null,
-        private readonly string $color = '',
-        private readonly bool $private = false,
-        private readonly ?string $recurrenceRule = null,
-        private readonly bool $editable = true,
-        private readonly bool $overdue = false,
-        private readonly bool $today = false,
-        private readonly ?string $createdAt = null,
-        private readonly ?string $updatedAt = null
+        $id = null,
+        $source = '',
+        $sourceId = '',
+        $sourceType = 'event',
+        $title = '',
+        $description = '',
+        $startDate = '',
+        $endDate = null,
+        $allDay = 'no',
+        $timezone = '',
+        $location = '',
+        $assignedTo = '',
+        $userId = null,
+        $customerId = null,
+        $projectId = null,
+        $taskId = null,
+        $contactId = null,
+        $status = 'pending',
+        $priority = 'medium',
+        $category = '',
+        $reminder = false,
+        $reminderMinutes = null,
+        $color = '',
+        $private = false,
+        $recurrenceRule = null,
+        $editable = true,
+        $overdue = false,
+        $today = false,
+        $createdAt = null,
+        $updatedAt = null
     ) {
+        $this->id = $id;
+        $this->source = $source;
+        $this->sourceId = $sourceId;
+        $this->sourceType = $sourceType;
+        $this->title = $title;
+        $this->description = $description;
+        $this->startDate = $startDate;
+        $this->endDate = $endDate;
+        $this->allDay = $allDay;
+        $this->timezone = $timezone;
+        $this->location = $location;
+        $this->assignedTo = $assignedTo;
+        $this->userId = $userId;
+        $this->customerId = $customerId;
+        $this->projectId = $projectId;
+        $this->taskId = $taskId;
+        $this->contactId = $contactId;
+        $this->status = $status;
+        $this->priority = $priority;
+        $this->category = $category;
+        $this->reminder = $reminder;
+        $this->reminderMinutes = $reminderMinutes;
+        $this->color = $color;
+        $this->private = $private;
+        $this->recurrenceRule = $recurrenceRule;
+        $this->editable = $editable;
+        $this->overdue = $overdue;
+        $this->today = $today;
+        $this->createdAt = $createdAt;
+        $this->updatedAt = $updatedAt;
     }
 
     public function toFullCalendarArray(): array
@@ -130,72 +190,72 @@ class CalendarEntryDTO
         }
 
         return new self(
-            id: isset($data['id']) ? (int) $data['id'] : null,
-            source: $data['source'] ?? '',
-            sourceId: $data['source_id'] ?? '',
-            sourceType: $data['source_type'] ?? 'event',
-            title: $data['title'] ?? '',
-            description: $data['description'] ?? '',
-            startDate: $data['start_date'] ?? '',
-            endDate: $data['end_date'] ?? null,
-            allDay: $data['all_day'] ?? 'no',
-            timezone: $data['timezone'] ?? date_default_timezone_get(),
-            location: $data['location'] ?? '',
-            assignedTo: $data['assigned_to'] ?? '',
-            userId: $data['user_id'] ?? null,
-            customerId: $data['customer_id'] ?? null,
-            projectId: $data['project_id'] ?? null,
-            taskId: $data['task_id'] ?? null,
-            contactId: $data['contact_id'] ?? null,
-            status: $data['status'] ?? 'pending',
-            priority: $data['priority'] ?? 'medium',
-            category: $data['category'] ?? '',
-            reminder: (bool) ($data['reminder'] ?? false),
-            reminderMinutes: isset($data['reminder_minutes']) ? (int) $data['reminder_minutes'] : null,
-            color: $data['color'] ?? '',
-            private: (bool) ($data['private'] ?? false),
-            recurrenceRule: $data['recurrence_rule'] ?? null,
-            editable: !($data['private'] ?? false),
-            overdue: $overdue,
-            today: $today,
-            createdAt: $data['created_at'] ?? null,
-            updatedAt: $data['updated_at'] ?? null
+            isset($data['id']) ? (int) $data['id'] : null,
+            $data['source'] ?? '',
+            $data['source_id'] ?? '',
+            $data['source_type'] ?? 'event',
+            $data['title'] ?? '',
+            $data['description'] ?? '',
+            $data['start_date'] ?? '',
+            $data['end_date'] ?? null,
+            $data['all_day'] ?? 'no',
+            $data['timezone'] ?? date_default_timezone_get(),
+            $data['location'] ?? '',
+            $data['assigned_to'] ?? '',
+            $data['user_id'] ?? null,
+            $data['customer_id'] ?? null,
+            $data['project_id'] ?? null,
+            $data['task_id'] ?? null,
+            $data['contact_id'] ?? null,
+            $data['status'] ?? 'pending',
+            $data['priority'] ?? 'medium',
+            $data['category'] ?? '',
+            (bool) ($data['reminder'] ?? false),
+            isset($data['reminder_minutes']) ? (int) $data['reminder_minutes'] : null,
+            $data['color'] ?? '',
+            (bool) ($data['private'] ?? false),
+            $data['recurrence_rule'] ?? null,
+            !($data['private'] ?? false),
+            $overdue,
+            $today,
+            $data['created_at'] ?? null,
+            $data['updated_at'] ?? null
         );
     }
 
     public static function fromEntity(\Ksfraser\Calendar\Entity\CalendarEntry $entity): self
     {
         return new self(
-            id: $entity->getId(),
-            source: $entity->getSource(),
-            sourceId: $entity->getSourceId(),
-            sourceType: $entity->getSourceType(),
-            title: $entity->getTitle(),
-            description: $entity->getDescription(),
-            startDate: ($entity->getStartDate() !== null ? $entity->getStartDate()->format('c') : ''),
-            endDate: ($entity->getEndDate() !== null ? $entity->getEndDate()->format('c') : ''),
-            allDay: $entity->getAllDay(),
-            timezone: $entity->getTimezone(),
-            location: $entity->getLocation(),
-            assignedTo: $entity->getAssignedTo(),
-            userId: $entity->getUserId(),
-            customerId: $entity->getCustomerId(),
-            projectId: $entity->getProjectId(),
-            taskId: $entity->getTaskId(),
-            contactId: $entity->getContactId(),
-            status: $entity->getStatus(),
-            priority: $entity->getPriority(),
-            category: $entity->getCategory(),
-            reminder: $entity->hasReminder(),
-            reminderMinutes: $entity->getReminderMinutes(),
-            color: $entity->getColor(),
-            private: $entity->isPrivate(),
-            recurrenceRule: $entity->getRecurrenceRule(),
-            editable: !$entity->isPrivate(),
-            overdue: $entity->isOverdue(),
-            today: $entity->isToday(),
-            createdAt: ($entity->getCreatedAt() !== null ? $entity->getCreatedAt()->format('c') : null),
-            updatedAt: ($entity->getUpdatedAt() !== null ? $entity->getUpdatedAt()->format('c') : null)
+            $entity->getId(),
+            $entity->getSource(),
+            $entity->getSourceId(),
+            $entity->getSourceType(),
+            $entity->getTitle(),
+            $entity->getDescription(),
+            ($entity->getStartDate() !== null ? $entity->getStartDate()->format('c') : ''),
+            ($entity->getEndDate() !== null ? $entity->getEndDate()->format('c') : ''),
+            $entity->getAllDay(),
+            $entity->getTimezone(),
+            $entity->getLocation(),
+            $entity->getAssignedTo(),
+            $entity->getUserId(),
+            $entity->getCustomerId(),
+            $entity->getProjectId(),
+            $entity->getTaskId(),
+            $entity->getContactId(),
+            $entity->getStatus(),
+            $entity->getPriority(),
+            $entity->getCategory(),
+            $entity->hasReminder(),
+            $entity->getReminderMinutes(),
+            $entity->getColor(),
+            $entity->isPrivate(),
+            $entity->getRecurrenceRule(),
+            !$entity->isPrivate(),
+            $entity->isOverdue(),
+            $entity->isToday(),
+            ($entity->getCreatedAt() !== null ? $entity->getCreatedAt()->format('c') : null),
+            ($entity->getUpdatedAt() !== null ? $entity->getUpdatedAt()->format('c') : null)
         );
     }
 
