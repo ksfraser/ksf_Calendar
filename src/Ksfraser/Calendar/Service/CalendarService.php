@@ -462,7 +462,12 @@ class CalendarService
             [(string) ($data['id'] ?? 0)]
         );
 
+        $startDateStr = $entry->getStartDate() !== null ? $entry->getStartDate()->format('Y-m-d H:i:s') : null;
+        $endDateStr   = $entry->getEndDate()   !== null ? $entry->getEndDate()->format('Y-m-d H:i:s')   : null;
+
         if ($exists) {
+            // UPDATE: 18 SET columns + 1 WHERE id = ? = 19 params total.
+            // Column order must match param order exactly.
             $sql = "UPDATE " . self::TABLE_ENTRIES . " SET
                     title = ?, description = ?, start_date = ?, end_date = ?,
                     all_day = ?, location = ?, assigned_to = ?, user_id = ?,
@@ -470,7 +475,30 @@ class CalendarService
                     status = ?, priority = ?, color = ?, private = ?,
                     reminder = ?, reminder_minutes = ?, updated_at = NOW()
                     WHERE id = ?";
+
+            $params = [
+                $entry->getTitle(),
+                $entry->getDescription(),
+                $startDateStr,
+                $endDateStr,
+                $entry->getAllDay(),
+                $entry->getLocation(),
+                $entry->getAssignedTo(),
+                $entry->getUserId(),
+                $entry->getCustomerId(),
+                $entry->getProjectId(),
+                $entry->getTaskId(),
+                $entry->getContactId(),
+                $entry->getStatus(),
+                $entry->getPriority(),
+                $entry->getColor(),
+                $entry->isPrivate() ? 1 : 0,
+                $entry->hasReminder() ? 1 : 0,
+                $entry->getReminderMinutes(),
+                $entry->getId() !== null ? (string) $entry->getId() : null,
+            ];
         } else {
+            // INSERT: 23 column placeholders (created_at/updated_at use NOW()). 23 params.
             $sql = "INSERT INTO " . self::TABLE_ENTRIES . " (
                     source, source_id, source_type, title, description,
                     start_date, end_date, all_day, timezone, location,
@@ -478,34 +506,35 @@ class CalendarService
                     status, priority, category, reminder, reminder_minutes, color, private,
                     created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+
+            $params = [
+                $entry->getSource(),
+                $entry->getSourceId(),
+                $entry->getSourceType(),
+                $entry->getTitle(),
+                $entry->getDescription(),
+                $startDateStr,
+                $endDateStr,
+                $entry->getAllDay(),
+                $entry->getTimezone(),
+                $entry->getLocation(),
+                $entry->getAssignedTo(),
+                $entry->getUserId(),
+                $entry->getCustomerId(),
+                $entry->getProjectId(),
+                $entry->getTaskId(),
+                $entry->getContactId(),
+                $entry->getStatus(),
+                $entry->getPriority(),
+                $entry->getCategory(),
+                $entry->hasReminder() ? 1 : 0,
+                $entry->getReminderMinutes(),
+                $entry->getColor(),
+                $entry->isPrivate() ? 1 : 0,
+            ];
         }
 
-        $this->db->executeUpdate($sql, [
-            $entry->getSource(),
-            $entry->getSourceId(),
-            $entry->getSourceType(),
-            $entry->getTitle(),
-            $entry->getDescription(),
-            $entry->getStartDate() !== null ? $entry->getStartDate()->format('Y-m-d') : null,
-            $entry->getEndDate() !== null ? $entry->getEndDate()->format('Y-m-d') : null,
-            $entry->getAllDay(),
-            $entry->getTimezone(),
-            $entry->getLocation(),
-            $entry->getAssignedTo(),
-            $entry->getUserId(),
-            $entry->getCustomerId(),
-            $entry->getProjectId(),
-            $entry->getTaskId(),
-            $entry->getContactId(),
-            $entry->getStatus(),
-            $entry->getPriority(),
-            $entry->getCategory(),
-            $entry->hasReminder() ? 1 : 0,
-            $entry->getReminderMinutes(),
-            $entry->getColor(),
-            $entry->isPrivate() ? 1 : 0,
-            $entry->getId() !== null ? (string) $entry->getId() : null,
-        ]);
+        $this->db->executeUpdate($sql, $params);
     }
 
     private function saveSource(CalendarSource $source): void
