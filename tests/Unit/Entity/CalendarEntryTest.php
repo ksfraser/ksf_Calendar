@@ -11,6 +11,7 @@ namespace Ksfraser\Calendar\Tests\Unit\Entity;
 
 use DateTime;
 use Ksfraser\Calendar\Entity\CalendarEntry;
+use Ksfraser\Calendar\Entity\CalendarInvitee;
 use PHPUnit\Framework\TestCase;
 
 class CalendarEntryTest extends TestCase
@@ -322,5 +323,123 @@ class CalendarEntryTest extends TestCase
         $this->assertSame('hrm', CalendarEntry::SOURCE_HRM);
         $this->assertSame('client', CalendarEntry::SOURCE_CLIENT);
         $this->assertSame('ical', CalendarEntry::SOURCE_ICAL);
+    }
+
+    // ---------------------------------------------------------------
+    // 1.1.0 fields: onlineUrl, phoneNumber, sendInvites, invitees
+    // ---------------------------------------------------------------
+
+    public function testDefaultsForNewFields(): void
+    {
+        $this->assertNull($this->entry->getOnlineUrl());
+        $this->assertNull($this->entry->getPhoneNumber());
+        $this->assertFalse($this->entry->getSendInvites());
+        $this->assertSame([], $this->entry->getInvitees());
+    }
+
+    public function testSetOnlineUrlReturnsSelf(): void
+    {
+        $result = $this->entry->setOnlineUrl('https://meet.example.com/room-1');
+        $this->assertSame($this->entry, $result);
+        $this->assertSame('https://meet.example.com/room-1', $this->entry->getOnlineUrl());
+    }
+
+    public function testSetOnlineUrlAcceptsNull(): void
+    {
+        $this->entry->setOnlineUrl('https://example.com');
+        $this->entry->setOnlineUrl(null);
+        $this->assertNull($this->entry->getOnlineUrl());
+    }
+
+    public function testSetPhoneNumberReturnsSelf(): void
+    {
+        $result = $this->entry->setPhoneNumber('+1-800-555-0199');
+        $this->assertSame($this->entry, $result);
+        $this->assertSame('+1-800-555-0199', $this->entry->getPhoneNumber());
+    }
+
+    public function testSetPhoneNumberAcceptsNull(): void
+    {
+        $this->entry->setPhoneNumber('555-1234');
+        $this->entry->setPhoneNumber(null);
+        $this->assertNull($this->entry->getPhoneNumber());
+    }
+
+    public function testSetSendInvitesReturnsSelf(): void
+    {
+        $result = $this->entry->setSendInvites(true);
+        $this->assertSame($this->entry, $result);
+        $this->assertTrue($this->entry->getSendInvites());
+    }
+
+    public function testAddInviteeAppendsToCollection(): void
+    {
+        $invitee = new CalendarInvitee(1, CalendarInvitee::TYPE_FA_USER, 'Alice', 'alice@example.com', '1');
+        $this->entry->addInvitee($invitee);
+        $this->assertCount(1, $this->entry->getInvitees());
+        $this->assertSame($invitee, $this->entry->getInvitees()[0]);
+    }
+
+    public function testSetInviteesReplacesCollection(): void
+    {
+        $a = new CalendarInvitee(1, CalendarInvitee::TYPE_FA_USER, 'Alice', 'a@example.com', '1');
+        $b = new CalendarInvitee(1, CalendarInvitee::TYPE_CRM_CONTACT, 'Bob', 'b@example.com', '2');
+        $this->entry->setInvitees([$a, $b]);
+        $this->assertCount(2, $this->entry->getInvitees());
+    }
+
+    public function testGetPersonInviteesExcludesResources(): void
+    {
+        $person   = new CalendarInvitee(1, CalendarInvitee::TYPE_FA_USER, 'Alice', 'a@example.com', '1');
+        $resource = new CalendarInvitee(1, CalendarInvitee::TYPE_RESOURCE, 'Room A', '', '9');
+        $this->entry->setInvitees([$person, $resource]);
+
+        $people = $this->entry->getPersonInvitees();
+        $this->assertCount(1, $people);
+        $this->assertSame('Alice', $people[0]->getName());
+    }
+
+    public function testGetResourceBookingsExcludesPeople(): void
+    {
+        $person   = new CalendarInvitee(1, CalendarInvitee::TYPE_FA_USER, 'Alice', 'a@example.com', '1');
+        $resource = new CalendarInvitee(1, CalendarInvitee::TYPE_RESOURCE, 'Room A', '', '9');
+        $this->entry->setInvitees([$person, $resource]);
+
+        $resources = $this->entry->getResourceBookings();
+        $this->assertCount(1, $resources);
+        $this->assertSame('Room A', $resources[0]->getName());
+    }
+
+    public function testToArrayIncludesNewFields(): void
+    {
+        $this->entry->setOnlineUrl('https://zoom.example.com/j/123');
+        $this->entry->setPhoneNumber('+1-555-9876');
+        $this->entry->setSendInvites(true);
+
+        $arr = $this->entry->toArray();
+
+        $this->assertSame('https://zoom.example.com/j/123', $arr['online_url']);
+        $this->assertSame('+1-555-9876', $arr['phone_number']);
+        $this->assertTrue($arr['send_invites']);
+    }
+
+    public function testFromArrayRestoresNewFields(): void
+    {
+        $data = [
+            'source'       => 'user',
+            'source_id'    => '1',
+            'source_type'  => 'meeting',
+            'title'        => 'Team Sync',
+            'start_date'   => '2026-05-01 10:00:00',
+            'online_url'   => 'https://meet.example.com/sync',
+            'phone_number' => '+44-20-1234-5678',
+            'send_invites' => 1,
+        ];
+
+        $entry = CalendarEntry::fromArray($data);
+
+        $this->assertSame('https://meet.example.com/sync', $entry->getOnlineUrl());
+        $this->assertSame('+44-20-1234-5678', $entry->getPhoneNumber());
+        $this->assertTrue($entry->getSendInvites());
     }
 }

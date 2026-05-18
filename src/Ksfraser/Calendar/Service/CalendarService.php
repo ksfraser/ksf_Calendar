@@ -13,6 +13,7 @@ namespace Ksfraser\Calendar\Service;
 
 use DateTime;
 use Ksfraser\Calendar\Entity\CalendarEntry;
+use Ksfraser\Calendar\Entity\CalendarInvitee;
 use Ksfraser\Calendar\Entity\CalendarSource;
 use Ksfraser\Calendar\Contract\DatabaseAdapterInterface;
 use Ksfraser\Calendar\Contract\ProjectServiceInterface;
@@ -25,8 +26,9 @@ use Psr\Log\LoggerInterface;
 
 class CalendarService
 {
-    private const TABLE_ENTRIES = 'fa_cal_entries';
-    private const TABLE_SOURCES = 'fa_cal_sources';
+    private const TABLE_ENTRIES  = 'fa_cal_entries';
+    private const TABLE_SOURCES  = 'fa_cal_sources';
+    private const TABLE_INVITEES = 'fa_cal_invitees';
 
     private $db;
     private $events;
@@ -100,6 +102,15 @@ class CalendarService
         if (isset($data['private'])) {
             $entry->setPrivate((bool) $data['private']);
         }
+        if (isset($data['online_url'])) {
+            $entry->setOnlineUrl($data['online_url']);
+        }
+        if (isset($data['phone_number'])) {
+            $entry->setPhoneNumber($data['phone_number']);
+        }
+        if (isset($data['send_invites'])) {
+            $entry->setSendInvites((bool) $data['send_invites']);
+        }
 
         $this->saveEntry($entry);
         $this->events->dispatch(new CalendarEntryCreatedEvent($entry));
@@ -117,7 +128,10 @@ class CalendarService
             throw new CalendarException("Calendar entry $id not found");
         }
 
-        return CalendarEntry::fromArray($row);
+        $entry = CalendarEntry::fromArray($row);
+        $entry->setInvitees($this->loadInvitees($id));
+
+        return $entry;
     }
 
     public function updateEntry(int $id, array $data): CalendarEntry
@@ -150,6 +164,15 @@ class CalendarService
         }
         if (isset($data['color'])) {
             $entry->setColor($data['color']);
+        }
+        if (array_key_exists('online_url', $data)) {
+            $entry->setOnlineUrl($data['online_url']);
+        }
+        if (array_key_exists('phone_number', $data)) {
+            $entry->setPhoneNumber($data['phone_number']);
+        }
+        if (isset($data['send_invites'])) {
+            $entry->setSendInvites((bool) $data['send_invites']);
         }
 
         $this->saveEntry($entry);
@@ -466,11 +489,11 @@ class CalendarService
         $endDateStr   = $entry->getEndDate()   !== null ? $entry->getEndDate()->format('Y-m-d H:i:s')   : null;
 
         if ($exists) {
-            // UPDATE: 18 SET columns + 1 WHERE id = ? = 19 params total.
-            // Column order must match param order exactly.
+            // UPDATE: 21 SET columns + 1 WHERE id = ? = 22 params total.
             $sql = "UPDATE " . self::TABLE_ENTRIES . " SET
                     title = ?, description = ?, start_date = ?, end_date = ?,
-                    all_day = ?, location = ?, assigned_to = ?, user_id = ?,
+                    all_day = ?, location = ?, online_url = ?, phone_number = ?,
+                    send_invites = ?, assigned_to = ?, user_id = ?,
                     customer_id = ?, project_id = ?, task_id = ?, contact_id = ?,
                     status = ?, priority = ?, color = ?, private = ?,
                     reminder = ?, reminder_minutes = ?, updated_at = NOW()
@@ -483,6 +506,9 @@ class CalendarService
                 $endDateStr,
                 $entry->getAllDay(),
                 $entry->getLocation(),
+                $entry->getOnlineUrl(),
+                $entry->getPhoneNumber(),
+                $entry->getSendInvites() ? 1 : 0,
                 $entry->getAssignedTo(),
                 $entry->getUserId(),
                 $entry->getCustomerId(),
@@ -498,14 +524,15 @@ class CalendarService
                 $entry->getId() !== null ? (string) $entry->getId() : null,
             ];
         } else {
-            // INSERT: 23 column placeholders (created_at/updated_at use NOW()). 23 params.
+            // INSERT: 26 column placeholders (created_at/updated_at use NOW()). 26 params.
             $sql = "INSERT INTO " . self::TABLE_ENTRIES . " (
                     source, source_id, source_type, title, description,
                     start_date, end_date, all_day, timezone, location,
+                    online_url, phone_number, send_invites,
                     assigned_to, user_id, customer_id, project_id, task_id, contact_id,
                     status, priority, category, reminder, reminder_minutes, color, private,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
 
             $params = [
                 $entry->getSource(),
@@ -518,6 +545,9 @@ class CalendarService
                 $entry->getAllDay(),
                 $entry->getTimezone(),
                 $entry->getLocation(),
+                $entry->getOnlineUrl(),
+                $entry->getPhoneNumber(),
+                $entry->getSendInvites() ? 1 : 0,
                 $entry->getAssignedTo(),
                 $entry->getUserId(),
                 $entry->getCustomerId(),
@@ -578,5 +608,385 @@ class CalendarService
         $row = $this->db->fetchAssoc($sql, [$source, $sourceId]);
 
         return $row ? CalendarEntry::fromArray($row) : null;
+    }
+
+    // ---------------------------------------------------------------
+    // Invitee methods
+    // ---------------------------------------------------------------
+
+    /**
+     * Add an invitee (person or resource) to a calendar entry.
+     *
+     * If contact_type = 'resource' and the resource is available (no
+     * conflicting accepted booking), rsvp_status is auto-set to 'accepted'.
+     *
+     * @param int   $entryId
+     * @param array $data  Keys: contact_type, contact_id, name, email, phone,
+     *                           is_organizer, rsvp_status (optional)
+     * @return CalendarInvitee
+     * @throws CalendarException
+     * @since 1.1.0
+     */
+    public function addInvitee(int $entryId, array $data): CalendarInvitee
+    {
+        // Ensure entry exists.
+        $this->getEntry($entryId);
+
+        $invitee = new CalendarInvitee(
+            $entryId,
+            (string) ($data['contact_type'] ?? CalendarInvitee::TYPE_AD_HOC),
+            (string) ($data['name']         ?? ''),
+            (string) ($data['email']        ?? ''),
+            isset($data['contact_id']) ? (string) $data['contact_id'] : null
+        );
+
+        if (isset($data['phone'])) {
+            $invitee->setPhone((string) $data['phone']);
+        }
+        if (isset($data['is_organizer'])) {
+            $invitee->setIsOrganizer((bool) $data['is_organizer']);
+        }
+
+        // Resources auto-accept when available.
+        if ($invitee->isResource()) {
+            $status = $this->isResourceAvailable(
+                (string) ($data['contact_id'] ?? ''),
+                $entryId
+            ) ? CalendarInvitee::RSVP_ACCEPTED : CalendarInvitee::RSVP_DECLINED;
+            $invitee->setRsvpStatus($status);
+        } elseif (isset($data['rsvp_status'])) {
+            $invitee->setRsvpStatus((string) $data['rsvp_status']);
+        }
+
+        $invitee->setInvitedAt(new \DateTime());
+
+        $this->saveInvitee($invitee);
+        return $invitee;
+    }
+
+    /**
+     * Update the RSVP status for an existing invitee.
+     *
+     * @param int    $inviteeId
+     * @param string $rsvpStatus  One of CalendarInvitee::RSVP_* constants
+     * @return CalendarInvitee
+     * @throws CalendarException
+     * @since 1.1.0
+     */
+    public function updateRsvp(int $inviteeId, string $rsvpStatus): CalendarInvitee
+    {
+        $row = $this->db->fetchAssoc(
+            "SELECT * FROM " . self::TABLE_INVITEES . " WHERE id = ? AND inactive = 0",
+            [(string) $inviteeId]
+        );
+
+        if (!$row) {
+            throw new CalendarException("Invitee $inviteeId not found");
+        }
+
+        $invitee = CalendarInvitee::fromArray($row);
+        $invitee->setRsvpStatus($rsvpStatus);
+
+        $this->db->executeUpdate(
+            "UPDATE " . self::TABLE_INVITEES . "
+             SET rsvp_status = ?, responded_at = NOW()
+             WHERE id = ?",
+            [$rsvpStatus, (string) $inviteeId]
+        );
+
+        return $invitee;
+    }
+
+    /**
+     * Soft-delete an invitee row.
+     *
+     * @param int $inviteeId
+     * @return void
+     * @throws CalendarException
+     * @since 1.1.0
+     */
+    public function removeInvitee(int $inviteeId): void
+    {
+        $affected = $this->db->executeUpdate(
+            "UPDATE " . self::TABLE_INVITEES . " SET inactive = 1 WHERE id = ?",
+            [(string) $inviteeId]
+        );
+
+        if ($affected === 0) {
+            throw new CalendarException("Invitee $inviteeId not found");
+        }
+    }
+
+    /**
+     * Return all active invitees for an entry (people + resources).
+     *
+     * @param int $entryId
+     * @return CalendarInvitee[]
+     * @since 1.1.0
+     */
+    public function getInviteesForEntry(int $entryId): array
+    {
+        return $this->loadInvitees($entryId);
+    }
+
+    /**
+     * Return busy time slots for a contact or resource across a date range.
+     *
+     * Returns an array of ['start' => string, 'end' => string] pairs (ISO 8601).
+     * Used to render the free/busy timeline in the invite modal.
+     *
+     * @param string   $contactType One of CalendarInvitee::TYPE_* constants
+     * @param string   $contactId   The contact/resource id
+     * @param DateTime $start       Range start (inclusive)
+     * @param DateTime $end         Range end (inclusive)
+     * @return array<int, array{start: string, end: string}>
+     * @since 1.1.0
+     */
+    public function getFreeBusy(
+        string $contactType,
+        string $contactId,
+        \DateTime $start,
+        \DateTime $end
+    ): array {
+        // Find all invitee rows for this contact in the date range that are not declined.
+        $sql = "SELECT e.start_date, e.end_date
+                FROM " . self::TABLE_INVITEES . " i
+                JOIN " . self::TABLE_ENTRIES . " e ON e.id = i.entry_id
+                WHERE i.contact_type = ?
+                  AND i.contact_id   = ?
+                  AND i.rsvp_status != ?
+                  AND i.inactive = 0
+                  AND e.inactive = 0
+                  AND e.start_date < ?
+                  AND (e.end_date > ? OR e.end_date IS NULL)
+                ORDER BY e.start_date ASC";
+
+        $rows = $this->db->fetchAll($sql, [
+            $contactType,
+            $contactId,
+            CalendarInvitee::RSVP_DECLINED,
+            $end->format('Y-m-d H:i:s'),
+            $start->format('Y-m-d H:i:s'),
+        ]);
+
+        return array_map(function (array $row): array {
+            return [
+                'start' => $row['start_date'],
+                'end'   => $row['end_date'] ?? $row['start_date'],
+            ];
+        }, $rows);
+    }
+
+    /**
+     * Search FA users and CRM contacts by name, last name, email, or phone.
+     *
+     * Returns lightweight result rows suitable for the invitee search panel:
+     *   [contact_type, contact_id, name, email, phone]
+     *
+     * CRM contacts are only included when the fa_crm_contacts table exists
+     * (i.e. ksf_FA_CRM is installed); the query silently returns an empty
+     * array for that source if the table is absent.
+     *
+     * @param string $query   The search string (minimum 2 characters)
+     * @param int    $limit   Maximum rows to return (default 20)
+     * @return array<int, array{contact_type: string, contact_id: string, name: string, email: string, phone: string}>
+     * @since 1.1.0
+     */
+    public function searchInvitees(string $query, int $limit = 20): array
+    {
+        if (strlen($query) < 2) {
+            return [];
+        }
+
+        $results = [];
+        $like    = '%' . $query . '%';
+
+        // FA users (always present).
+        $userRows = $this->db->fetchAll(
+            "SELECT user_id, real_name, email
+             FROM users
+             WHERE (real_name LIKE ? OR email LIKE ?)
+               AND inactive = 0
+             LIMIT ?",
+            [$like, $like, $limit]
+        );
+
+        foreach ($userRows as $row) {
+            $results[] = [
+                'contact_type' => CalendarInvitee::TYPE_FA_USER,
+                'contact_id'   => (string) $row['user_id'],
+                'name'         => (string) ($row['real_name'] ?? ''),
+                'email'        => (string) ($row['email']     ?? ''),
+                'phone'        => '',
+            ];
+        }
+
+        // CRM contacts (optional; silently skipped if module not installed).
+        try {
+            $crmRows = $this->db->fetchAll(
+                "SELECT id, CONCAT(first_name, ' ', last_name) AS full_name,
+                        email, phone
+                 FROM fa_crm_contacts
+                 WHERE (first_name LIKE ? OR last_name LIKE ?
+                        OR email LIKE ?  OR phone LIKE ?)
+                   AND inactive = 0
+                 LIMIT ?",
+                [$like, $like, $like, $like, $limit]
+            );
+
+            foreach ($crmRows as $row) {
+                $results[] = [
+                    'contact_type' => CalendarInvitee::TYPE_CRM_CONTACT,
+                    'contact_id'   => (string) $row['id'],
+                    'name'         => (string) ($row['full_name'] ?? ''),
+                    'email'        => (string) ($row['email']     ?? ''),
+                    'phone'        => (string) ($row['phone']     ?? ''),
+                ];
+            }
+        } catch (\Exception $e) {
+            // CRM module not installed; skip.
+            $this->logger->debug('CRM contact search skipped', ['reason' => $e->getMessage()]);
+        }
+
+        // Resources (optional; silently skipped if module not installed).
+        try {
+            $resourceRows = $this->db->fetchAll(
+                "SELECT id, name, email, phone
+                 FROM fa_resources
+                 WHERE (name LIKE ? OR email LIKE ?)
+                   AND inactive = 0
+                 LIMIT ?",
+                [$like, $like, $limit]
+            );
+
+            foreach ($resourceRows as $row) {
+                $results[] = [
+                    'contact_type' => CalendarInvitee::TYPE_RESOURCE,
+                    'contact_id'   => (string) $row['id'],
+                    'name'         => (string) ($row['name']  ?? ''),
+                    'email'        => (string) ($row['email'] ?? ''),
+                    'phone'        => (string) ($row['phone'] ?? ''),
+                ];
+            }
+        } catch (\Exception $e) {
+            // Resources module not installed; skip.
+            $this->logger->debug('Resource search skipped', ['reason' => $e->getMessage()]);
+        }
+
+        return array_slice($results, 0, $limit);
+    }
+
+    // ---------------------------------------------------------------
+    // Private helpers
+    // ---------------------------------------------------------------
+
+    /**
+     * Load all active invitee rows for an entry.
+     *
+     * @param int $entryId
+     * @return CalendarInvitee[]
+     * @since 1.1.0
+     */
+    private function loadInvitees(int $entryId): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT * FROM " . self::TABLE_INVITEES . "
+             WHERE entry_id = ? AND inactive = 0
+             ORDER BY is_organizer DESC, is_resource ASC, id ASC",
+            [(string) $entryId]
+        );
+
+        return array_map(function (array $row): CalendarInvitee {
+            return CalendarInvitee::fromArray($row);
+        }, $rows);
+    }
+
+    /**
+     * INSERT a new invitee row and set its auto-incremented id.
+     *
+     * @param CalendarInvitee $invitee
+     * @return void
+     * @since 1.1.0
+     */
+    private function saveInvitee(CalendarInvitee $invitee): void
+    {
+        $data = $invitee->toArray();
+
+        $this->db->executeUpdate(
+            "INSERT INTO " . self::TABLE_INVITEES . "
+             (entry_id, contact_type, contact_id, name, email, phone,
+              rsvp_status, is_organizer, is_resource, invited_at, inactive)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+            [
+                $data['entry_id'],
+                $data['contact_type'],
+                $data['contact_id'],
+                $data['name'],
+                $data['email'],
+                $data['phone'],
+                $data['rsvp_status'],
+                $data['is_organizer'] ? 1 : 0,
+                $data['is_resource']  ? 1 : 0,
+                $data['invited_at'],
+            ]
+        );
+    }
+
+    /**
+     * Check whether a resource has no conflicting accepted booking that
+     * overlaps the given entry's time slot.
+     *
+     * Returns true (available) if the resource has no accepted invitee rows
+     * for entries that overlap the target entry's start/end window.
+     *
+     * @param string $resourceId
+     * @param int    $entryId    The entry being booked (excluded from conflict check)
+     * @return bool
+     * @since 1.1.0
+     */
+    private function isResourceAvailable(string $resourceId, int $entryId): bool
+    {
+        if ($resourceId === '') {
+            return false;
+        }
+
+        // Fetch the target entry's time window.
+        $entry = $this->db->fetchAssoc(
+            "SELECT start_date, end_date FROM " . self::TABLE_ENTRIES . " WHERE id = ?",
+            [(string) $entryId]
+        );
+
+        if (!$entry || empty($entry['start_date'])) {
+            return true;
+        }
+
+        $startDate = $entry['start_date'];
+        $endDate   = !empty($entry['end_date']) ? $entry['end_date'] : $startDate;
+
+        $conflict = $this->db->fetchAssoc(
+            "SELECT i.id
+             FROM " . self::TABLE_INVITEES . " i
+             JOIN " . self::TABLE_ENTRIES . " e ON e.id = i.entry_id
+             WHERE i.contact_type = ?
+               AND i.contact_id   = ?
+               AND i.is_resource  = 1
+               AND i.rsvp_status  = ?
+               AND i.inactive     = 0
+               AND e.inactive     = 0
+               AND i.entry_id    != ?
+               AND e.start_date   < ?
+               AND (e.end_date   > ? OR e.end_date IS NULL)
+             LIMIT 1",
+            [
+                CalendarInvitee::TYPE_RESOURCE,
+                $resourceId,
+                CalendarInvitee::RSVP_ACCEPTED,
+                (string) $entryId,
+                $endDate,
+                $startDate,
+            ]
+        );
+
+        return $conflict === null;
     }
 }

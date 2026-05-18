@@ -13,6 +13,7 @@ namespace Ksfraser\Calendar\Entity;
 
 use DateTime;
 use DateTimeInterface;
+use Ksfraser\Calendar\Entity\CalendarInvitee;
 
 class CalendarEntry
 {
@@ -91,6 +92,27 @@ class CalendarEntry
     private ?DateTime $createdAt;
     private ?DateTime $updatedAt;
 
+    // --- Invitee / type-specific fields (added 1.1.0) ---
+
+    /** Online meeting URL shown for TYPE_MEETING entries. */
+    private ?string $onlineUrl;
+
+    /** Dial-in phone number shown for TYPE_CALL entries. */
+    private ?string $phoneNumber;
+
+    /** Whether to send iCal email invitations to all invitees on save. */
+    private bool $sendInvites;
+
+    /**
+     * In-memory collection of CalendarInvitee objects.
+     * Covers both person attendees (contact_type = fa_user|crm_contact|ad_hoc)
+     * and resource bookings (contact_type = resource, is_resource = 1).
+     * Populated by CalendarService::getEntry() via a JOIN-load.
+     *
+     * @var CalendarInvitee[]
+     */
+    private array $invitees;
+
     public function __construct(
         string $source,
         string $sourceId,
@@ -128,6 +150,10 @@ class CalendarEntry
         $this->inactive = false;
         $this->createdAt = new DateTime();
         $this->updatedAt = new DateTime();
+        $this->onlineUrl = null;
+        $this->phoneNumber = null;
+        $this->sendInvites = false;
+        $this->invitees = [];
     }
 
     public function getId(): ?int
@@ -392,6 +418,149 @@ class CalendarEntry
         return $this;
     }
 
+    // --- Invitee / type-specific getters & setters ---
+
+    /**
+     * Get the online meeting URL (relevant for TYPE_MEETING).
+     *
+     * @return string|null
+     * @since 1.1.0
+     */
+    public function getOnlineUrl(): ?string
+    {
+        return $this->onlineUrl;
+    }
+
+    /**
+     * Set the online meeting URL.
+     *
+     * @param string|null $onlineUrl
+     * @return self
+     * @since 1.1.0
+     */
+    public function setOnlineUrl(?string $onlineUrl): self
+    {
+        $this->onlineUrl = $onlineUrl;
+        return $this;
+    }
+
+    /**
+     * Get the dial-in phone number (relevant for TYPE_CALL).
+     *
+     * @return string|null
+     * @since 1.1.0
+     */
+    public function getPhoneNumber(): ?string
+    {
+        return $this->phoneNumber;
+    }
+
+    /**
+     * Set the dial-in phone number.
+     *
+     * @param string|null $phoneNumber
+     * @return self
+     * @since 1.1.0
+     */
+    public function setPhoneNumber(?string $phoneNumber): self
+    {
+        $this->phoneNumber = $phoneNumber;
+        return $this;
+    }
+
+    /**
+     * Whether to send iCal email invitations to invitees on save.
+     *
+     * @return bool
+     * @since 1.1.0
+     */
+    public function getSendInvites(): bool
+    {
+        return $this->sendInvites;
+    }
+
+    /**
+     * Set whether to send iCal email invitations.
+     *
+     * @param bool $sendInvites
+     * @return self
+     * @since 1.1.0
+     */
+    public function setSendInvites(bool $sendInvites): self
+    {
+        $this->sendInvites = $sendInvites;
+        return $this;
+    }
+
+    /**
+     * Get the in-memory invitee collection.
+     *
+     * @return CalendarInvitee[]
+     * @since 1.1.0
+     */
+    public function getInvitees(): array
+    {
+        return $this->invitees;
+    }
+
+    /**
+     * Replace the entire invitee collection (used by CalendarService after DB load).
+     *
+     * @param CalendarInvitee[] $invitees
+     * @return self
+     * @since 1.1.0
+     */
+    public function setInvitees(array $invitees): self
+    {
+        $this->invitees = $invitees;
+        return $this;
+    }
+
+    /**
+     * Add a single invitee to the in-memory collection.
+     *
+     * @param CalendarInvitee $invitee
+     * @return self
+     * @since 1.1.0
+     */
+    public function addInvitee(CalendarInvitee $invitee): self
+    {
+        $this->invitees[] = $invitee;
+        return $this;
+    }
+
+    /**
+     * Return only the resource-booking rows from the invitees collection.
+     *
+     * @return CalendarInvitee[]
+     * @since 1.1.0
+     */
+    public function getResourceBookings(): array
+    {
+        return array_values(array_filter(
+            $this->invitees,
+            function (CalendarInvitee $i) {
+                return $i->isResource();
+            }
+        ));
+    }
+
+    /**
+     * Return only the person-invitee rows from the invitees collection.
+     *
+     * @return CalendarInvitee[]
+     * @since 1.1.0
+     */
+    public function getPersonInvitees(): array
+    {
+        return array_values(array_filter(
+            $this->invitees,
+            function (CalendarInvitee $i) {
+                return !$i->isResource();
+            }
+        ));
+    }
+
     public function isInactive(): bool
     {
         return $this->inactive;
@@ -459,6 +628,9 @@ class CalendarEntry
             'all_day' => $this->allDay,
             'timezone' => $this->timezone,
             'location' => $this->location,
+            'online_url' => $this->onlineUrl,
+            'phone_number' => $this->phoneNumber,
+            'send_invites' => $this->sendInvites,
             'assigned_to' => $this->assignedTo,
             'user_id' => $this->userId,
             'customer_id' => $this->customerId,
@@ -498,6 +670,9 @@ class CalendarEntry
         $entry->setAllDay($data['all_day'] ?? 'no');
         $entry->setTimezone($data['timezone'] ?? date_default_timezone_get());
         $entry->setLocation($data['location'] ?? '');
+        $entry->setOnlineUrl($data['online_url'] ?? null);
+        $entry->setPhoneNumber($data['phone_number'] ?? null);
+        $entry->setSendInvites((bool) ($data['send_invites'] ?? false));
         $entry->setAssignedTo($data['assigned_to'] ?? '');
         $entry->setUserId($data['user_id'] ?? null);
         $entry->setCustomerId($data['customer_id'] ?? null);
