@@ -353,10 +353,10 @@ class CalendarSource
     public static function fromArray(array $data): self
     {
         $source = new self(
-            name: $data['name'] ?? '',
-            type: $data['type'] ?? self::TYPE_INTERNAL,
-            source: $data['source'] ?? '',
-            id: $data['id'] ?? null
+            $data['name'] ?? '',
+            $data['type'] ?? self::TYPE_INTERNAL,
+            $data['source'] ?? '',
+            $data['id'] ?? null
         );
 
         $source->setUrl($data['url'] ?? '');
