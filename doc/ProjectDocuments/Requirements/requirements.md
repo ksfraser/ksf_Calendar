@@ -64,17 +64,34 @@ Each source has filters for which source_types to include.
 ### 3. Services
 
 #### CalendarService
-- CRUD for CalendarEntry
+- Full CRUD (Create, Read, Update, Delete) for CalendarEntry
+- Edit (update) existing entries by ID
 - Query by date range, user, customer, project
 - Sync from PM (ksf_ProjectManagement)
 - Sync from CRM (FA_CRM communications)
 - Source management
+- `DEFAULT_DURATION_MINUTES = 15`: if `end_date` is absent/empty when creating or updating an entry, the end is set to `start + DEFAULT_DURATION_MINUTES`. For all-day entries the default is ±1 day instead.
+- `all_day` stored strictly as the string `'yes'` or `'no'`. The string `'no'` must **not** be treated as truthy (PHP non-empty-string bug). Comparison must be `=== 'yes'`.
 
 #### iCalService
 - Export entries to iCal format (eluceo/ical)
 - Import from URL/file/string (php-icalendar-core)
 - Generate public iCal feed URLs
 - Filter export by source
+
+### 3a. ksf_FA_Calendar AJAX Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `create_entry` | POST (JSON) | Create new entry; returns `{id}` |
+| `get_entry` | GET `?id=N` | Fetch one entry as FC-array + invitees |
+| `update_entry` | POST (JSON) | Update existing entry by `id` field |
+| `delete_entry` | POST (JSON) | Delete entry by `id` |
+| `add_invitee` | POST (JSON) | Add invitee to entry |
+| `remove_invitee` | POST (JSON) | Remove invitee from entry |
+| `get_entries` | GET | Query entries by date range |
+
+All POST handlers read from `php://input` (JSON body), not `$_POST`.
 
 ### 4. Events (PSR-14)
 

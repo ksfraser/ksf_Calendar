@@ -60,6 +60,12 @@ ksf_Calendar/
 └── phpunit.xml
 ```
 
+## CalendarService Constants
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `DEFAULT_DURATION_MINUTES` | `15` | Default entry length when `end_date` is absent or empty. Applied in `createEntry()` and `updateEntry()` via `applyDefaultDuration()`. All-day entries use ±1 day instead. |
+
 ## FullCalendar.js Integration
 
 The `CalendarEntryDTO` has a `toFullCalendarArray()` method that produces:
@@ -122,6 +128,27 @@ User works on Task
                                 │
                                 ├─► Standard book time → Billing
                                 └─► Actual hours → Tracking
+```
+
+## Edit Flow (ksf_FA_Calendar)
+
+```
+User clicks event detail panel → "Edit" button
+    │
+    ├─► GET get_entry?id=N
+    │       └─► CalendarService::getEntry(N)
+    │               └─► returns {event: FC-array, invitees: [...]}
+    │
+    ├─► openModalForEdit(event, invitees)
+    │       - Sets editId = N
+    │       - Pre-populates Subject, Start, End, All Day, Description
+    │       - Renders existing invitees in modal lists
+    │       - Sets modal title to "Edit Calendar Entry"
+    │
+    └─► User submits
+            └─► POST update_entry {id, title, start_date, end_date, all_day, ...}
+                    └─► CalendarService::updateEntry(N, data)
+                            └─► applyDefaultDuration() if end missing
 ```
 
 ## Database Tables
