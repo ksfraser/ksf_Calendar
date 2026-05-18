@@ -36,6 +36,8 @@ class CalendarEntryDTO
     private $reminderMinutes;
     private $color;
     private $private;
+    private $onlineUrl;
+    private $phoneNumber;
     private $recurrenceRule;
     private $editable;
     private $overdue;
@@ -68,6 +70,8 @@ class CalendarEntryDTO
         $reminderMinutes = null,
         $color = '',
         $private = false,
+        $onlineUrl = null,
+        $phoneNumber = null,
         $recurrenceRule = null,
         $editable = true,
         $overdue = false,
@@ -99,6 +103,8 @@ class CalendarEntryDTO
         $this->reminderMinutes = $reminderMinutes;
         $this->color = $color;
         $this->private = $private;
+        $this->onlineUrl = $onlineUrl;
+        $this->phoneNumber = $phoneNumber;
         $this->recurrenceRule = $recurrenceRule;
         $this->editable = $editable;
         $this->overdue = $overdue;
@@ -135,6 +141,8 @@ class CalendarEntryDTO
                 'status' => $this->status,
                 'priority' => $this->priority,
                 'overdue' => $this->overdue,
+                'online_url' => $this->onlineUrl,
+                'phone_number' => $this->phoneNumber,
             ],
         ];
     }
@@ -166,6 +174,8 @@ class CalendarEntryDTO
             'reminder_minutes' => $this->reminderMinutes,
             'color' => $this->color,
             'private' => $this->private,
+            'online_url' => $this->onlineUrl,
+            'phone_number' => $this->phoneNumber,
             'recurrence_rule' => $this->recurrenceRule,
             'editable' => $this->editable,
             'overdue' => $this->overdue,
@@ -214,6 +224,8 @@ class CalendarEntryDTO
             isset($data['reminder_minutes']) ? (int) $data['reminder_minutes'] : null,
             $data['color'] ?? '',
             (bool) ($data['private'] ?? false),
+            $data['online_url'] ?? null,
+            $data['phone_number'] ?? null,
             $data['recurrence_rule'] ?? null,
             !($data['private'] ?? false),
             $overdue,
@@ -250,6 +262,8 @@ class CalendarEntryDTO
             $entity->getReminderMinutes(),
             $entity->getColor(),
             $entity->isPrivate(),
+            $entity->getOnlineUrl(),
+            $entity->getPhoneNumber(),
             $entity->getRecurrenceRule(),
             !$entity->isPrivate(),
             $entity->isOverdue(),
