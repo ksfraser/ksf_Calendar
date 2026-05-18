@@ -237,6 +237,18 @@ class CalendarEntryDTO
 
     public static function fromEntity(\Ksfraser\Calendar\Entity\CalendarEntry $entity): self
     {
+        $allDay = $entity->getAllDay();
+        // Use date-only format for all-day events; use naive (no TZ offset) ISO
+        // datetime for timed events.  Emitting format('c') with a UTC offset causes
+        // FullCalendar to convert to the browser's local timezone, producing wrong
+        // display times (e.g. +2 hours on a UTC+2 client connecting to a UTC server).
+        // Naive strings are treated as "wall-clock local" by both FullCalendar and JS
+        // Date(), which is the correct behaviour for a single-timezone deployment.
+        $dateFormat  = 'Y-m-d';
+        $dtFormat    = 'Y-m-d\TH:i:s';
+        $startFormat = ($allDay === 'yes') ? $dateFormat : $dtFormat;
+        $endFormat   = ($allDay === 'yes') ? $dateFormat : $dtFormat;
+
         return new self(
             $entity->getId(),
             $entity->getSource(),
@@ -244,9 +256,9 @@ class CalendarEntryDTO
             $entity->getSourceType(),
             $entity->getTitle(),
             $entity->getDescription(),
-            ($entity->getStartDate() !== null ? $entity->getStartDate()->format('c') : ''),
-            ($entity->getEndDate() !== null ? $entity->getEndDate()->format('c') : ''),
-            $entity->getAllDay(),
+            ($entity->getStartDate() !== null ? $entity->getStartDate()->format($startFormat) : ''),
+            ($entity->getEndDate() !== null ? $entity->getEndDate()->format($endFormat) : ''),
+            $allDay,
             $entity->getTimezone(),
             $entity->getLocation(),
             $entity->getAssignedTo(),
