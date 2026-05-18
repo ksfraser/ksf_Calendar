@@ -30,6 +30,18 @@ class CalendarService
     private const TABLE_SOURCES  = 'fa_cal_sources';
     private const TABLE_INVITEES = 'fa_cal_invitees';
 
+    /**
+     * Default entry duration in minutes used when only one boundary is provided.
+     *
+     * When start_date is set but end_date is absent, end_date is calculated as
+     * start_date + DEFAULT_DURATION_MINUTES.  When end_date is set but start_date
+     * is absent, start_date is calculated as end_date - DEFAULT_DURATION_MINUTES.
+     * All-day entries use 1 day instead of this value.
+     *
+     * @var int
+     */
+    public const DEFAULT_DURATION_MINUTES = 15;
+
     private $db;
     private $events;
     private $logger;
@@ -63,8 +75,8 @@ class CalendarService
             $entryId
         );
 
-        if (isset($data['end_date'])) {
-            $entry->setEndDate(new DateTime($data['end_date']));
+        if (array_key_exists('end_date', $data)) {
+            $entry->setEndDate($data['end_date'] ? new DateTime($data['end_date']) : null);
         }
         if (isset($data['description'])) {
             $entry->setDescription($data['description']);
@@ -96,8 +108,8 @@ class CalendarService
         if (isset($data['color'])) {
             $entry->setColor($data['color']);
         }
-        if (isset($data['all_day']) && $data['all_day']) {
-            $entry->setAllDay('yes');
+        if (isset($data['all_day'])) {
+            $entry->setAllDay($data['all_day'] === 'yes' ? 'yes' : 'no');
         }
         if (isset($data['private'])) {
             $entry->setPrivate((bool) $data['private']);
@@ -111,6 +123,8 @@ class CalendarService
         if (isset($data['send_invites'])) {
             $entry->setSendInvites((bool) $data['send_invites']);
         }
+
+        $this->applyDefaultDuration($entry);
 
         $this->saveEntry($entry);
         $this->events->dispatch(new CalendarEntryCreatedEvent($entry));
@@ -165,6 +179,9 @@ class CalendarService
         if (isset($data['color'])) {
             $entry->setColor($data['color']);
         }
+        if (isset($data['all_day'])) {
+            $entry->setAllDay($data['all_day'] === 'yes' ? 'yes' : 'no');
+        }
         if (array_key_exists('online_url', $data)) {
             $entry->setOnlineUrl($data['online_url']);
         }
@@ -174,6 +191,8 @@ class CalendarService
         if (isset($data['send_invites'])) {
             $entry->setSendInvites((bool) $data['send_invites']);
         }
+
+        $this->applyDefaultDuration($entry);
 
         $this->saveEntry($entry);
         $this->events->dispatch(new CalendarEntryUpdatedEvent($entry));
@@ -474,6 +493,50 @@ class CalendarService
         $sql = "SELECT MAX(CAST(id AS UNSIGNED)) + 1 as next_id FROM " . self::TABLE_ENTRIES;
         $result = $this->db->fetchAssoc($sql);
         return (string) ($result['next_id'] ?? 1);
+    }
+
+    /**
+     * Fill in the missing date boundary using the configured default duration.
+     *
+     * Rules:
+     *  - start set, end missing  → end  = start + DEFAULT_DURATION_MINUTES (or +1 day for all-day)
+     *  - end set, start missing  → start = end   - DEFAULT_DURATION_MINUTES (or -1 day for all-day)
+     *  - both set or both missing → no change
+     *
+     * Called by createEntry() and updateEntry() before saveEntry().
+     *
+     * @param CalendarEntry $entry  Entry to mutate in place
+     * @return void
+     *
+     * @since 1.2.0
+     * @see CalendarService::DEFAULT_DURATION_MINUTES
+     */
+    private function applyDefaultDuration(CalendarEntry $entry): void
+    {
+        $start  = $entry->getStartDate();
+        $end    = $entry->getEndDate();
+        $allDay = $entry->isAllDay();
+
+        if ($start !== null && $end === null) {
+            $computed = clone $start;
+            if ($allDay) {
+                $computed->modify('+1 day');
+            } else {
+                $computed->modify('+' . self::DEFAULT_DURATION_MINUTES . ' minutes');
+            }
+            $entry->setEndDate($computed);
+            return;
+        }
+
+        if ($end !== null && $start === null) {
+            $computed = clone $end;
+            if ($allDay) {
+                $computed->modify('-1 day');
+            } else {
+                $computed->modify('-' . self::DEFAULT_DURATION_MINUTES . ' minutes');
+            }
+            $entry->setStartDate($computed);
+        }
     }
 
     private function saveEntry(CalendarEntry $entry): void
