@@ -683,7 +683,7 @@ class CalendarEntry
         $entry->setPriority($data['priority'] ?? 'medium');
         $entry->setCategory($data['category'] ?? '');
         if (isset($data['reminder'])) {
-            $entry->setReminder((bool) $data['reminder'], $data['reminder_minutes'] ?? 15);
+            $entry->setReminder((bool) $data['reminder'], isset($data['reminder_minutes']) ? (int) $data['reminder_minutes'] : 15);
         }
         $entry->setColor($data['color'] ?? '');
         $entry->setPrivate((bool) ($data['private'] ?? false));
