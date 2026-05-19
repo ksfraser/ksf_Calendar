@@ -278,14 +278,38 @@ class CalendarService
 
         if (!empty($filters['viewable_by'])) {
             $userId = (int) $filters['viewable_by'];
+
+            // Visibility subquery — resolves invitees via FA person registry.
+            //
+            // fa_cal_invitees.contact_id stores 0_crm_contacts.id (INT).
+            // The person registry links every "hat" (user, crm_contact, etc.)
+            // to a canonical crm_persons row via person_id.
+            //
+            // To find entries visible to $userId:
+            //   assigned_to = $userId  (direct ownership)
+            //   OR the entry has an invitee whose crm_persons row also has
+            //   a 'user' hat whose entity_id = $userId (numeric 0_users.id).
+            //
+            // entity_id is VARCHAR in 0_crm_contacts, so compare as string.
+            //
+            // This subquery is inoperative (matches 0 rows for the JOIN path)
+            // until the user has been provisioned in crm_contacts by
+            // ksf_FA_RBAC.  assigned_to is still respected in that case.
+            //
+            // @see fa_person_registry_categories.sql — 'user' crm_category
+            // @see TODO-AMB-010 Users-to-Contacts provisioning
             $sql .= " AND (assigned_to = ?"
                   . " OR id IN ("
                   .     "SELECT entry_id FROM " . self::TABLE_INVITEES . " i"
-                  .     " JOIN users u ON u.user_id = i.contact_id"
-                  .     " WHERE u.id = ? AND i.inactive = 0"
+                  .     " JOIN crm_contacts ic ON ic.id = i.contact_id"
+                  .     " JOIN crm_contacts uc ON uc.person_id = ic.person_id"
+                  .                            " AND uc.type = 'user'"
+                  .                            " AND uc.entity_id = ?"
+                  .     " WHERE i.inactive = 0"
                   . "))";
+
             $params[] = $userId;
-            $params[] = $userId;
+            $params[] = (string) $userId;
         }
 
         $sql .= " ORDER BY start_date ASC";
@@ -853,19 +877,24 @@ class CalendarService
     }
 
     /**
-     * Search FA users and CRM contacts by name, last name, email, or phone.
+     * Search persons by name or email via the FA person registry.
      *
-     * Returns lightweight result rows suitable for the invitee search panel:
-     *   [contact_type, contact_id, name, email, phone]
+     * Returns one row per "hat" (crm_contacts row) per matching person.
+     * For example, if Kevin Fraser has both a 'user' hat and a 'crm_contact'
+     * hat, he appears twice — allowing the inviter to choose which role he
+     * plays in this calendar event.
      *
-     * CRM contacts are only included when the fa_crm_contacts table exists
-     * (i.e. ksf_FA_CRM is installed); the query silently returns an empty
-     * array for that source if the table is absent.
+     * Resources (fa_resources) are also included when the module is installed.
+     *
+     * Silently skips the person registry if crm_persons is unavailable.
+     * Silently skips resources if fa_resources is unavailable.
+     *
+     * Result rows: [contact_type, contact_id (= crm_contacts.id), name, email, phone]
      *
      * @param string $query   The search string (minimum 2 characters)
      * @param int    $limit   Maximum rows to return (default 20)
      * @return array<int, array{contact_type: string, contact_id: string, name: string, email: string, phone: string}>
-     * @since 1.1.0
+     * @since 1.3.0
      */
     public function searchInvitees(string $query, int $limit = 20): array
     {
@@ -876,68 +905,57 @@ class CalendarService
         $results = [];
         $like    = '%' . $query . '%';
 
-        // FA users (always present).
-        $userRows = $this->db->fetchAll(
-            "SELECT user_id, real_name, email
-             FROM users
-             WHERE (real_name LIKE ? OR email LIKE ?)
-               AND inactive = 0
-             LIMIT ?",
-            [$like, $like, $limit]
-        );
-
-        foreach ($userRows as $row) {
-            $results[] = [
-                'contact_type' => CalendarInvitee::TYPE_FA_USER,
-                'contact_id'   => (string) $row['user_id'],
-                'name'         => (string) ($row['real_name'] ?? ''),
-                'email'        => (string) ($row['email']     ?? ''),
-                'phone'        => '',
-            ];
-        }
-
-        // CRM contacts (optional; silently skipped if module not installed).
+        // Person registry: crm_persons JOIN crm_contacts JOIN crm_categories.
+        // Returns one row per "hat" per person.
+        // contact_id = crm_contacts.id (the row the invitee slot will reference).
         try {
-            $crmRows = $this->db->fetchAll(
-                "SELECT id, CONCAT(first_name, ' ', last_name) AS full_name,
-                        email, phone
-                 FROM fa_crm_contacts
-                 WHERE (first_name LIKE ? OR last_name LIKE ?
-                        OR email LIKE ?  OR phone LIKE ?)
-                   AND inactive = 0
-                 LIMIT ?",
-                [$like, $like, $like, $like, $limit]
+            $personRows = $this->db->fetchAll(
+                "SELECT cp.id       AS person_id,"
+                . "     cc.id       AS crm_contact_id,"
+                . "     cc.type     AS contact_type,"
+                . "     cc.entity_id,"
+                . "     cp.name,"
+                . "     cp.email,"
+                . "     cp.phone,"
+                . "     cat.name    AS type_label"
+                . " FROM crm_persons cp"
+                . " JOIN crm_contacts cc  ON cc.person_id = cp.id AND cc.inactive = 0"
+                . " JOIN crm_categories cat ON cat.type = cc.type AND cat.action = 'general'"
+                . " WHERE (cp.name LIKE ? OR cp.email LIKE ?)"
+                . "   AND cp.inactive = 0"
+                . " ORDER BY cp.name, cc.type"
+                . " LIMIT ?",
+                [$like, $like, $limit]
             );
 
-            foreach ($crmRows as $row) {
+            foreach ($personRows as $row) {
                 $results[] = [
-                    'contact_type' => CalendarInvitee::TYPE_CRM_CONTACT,
-                    'contact_id'   => (string) $row['id'],
-                    'name'         => (string) ($row['full_name'] ?? ''),
-                    'email'        => (string) ($row['email']     ?? ''),
-                    'phone'        => (string) ($row['phone']     ?? ''),
+                    'contact_type' => (string) ($row['contact_type']   ?? ''),
+                    'contact_id'   => (string) ($row['crm_contact_id'] ?? ''),
+                    'name'         => (string) ($row['name']           ?? ''),
+                    'email'        => (string) ($row['email']          ?? ''),
+                    'phone'        => (string) ($row['phone']          ?? ''),
                 ];
             }
         } catch (\Exception $e) {
-            // CRM module not installed; skip.
-            $this->logger->debug('CRM contact search skipped', ['reason' => $e->getMessage()]);
+            $this->logger->debug('Person registry search skipped', ['reason' => $e->getMessage()]);
         }
 
         // Resources (optional; silently skipped if module not installed).
         try {
             $resourceRows = $this->db->fetchAll(
-                "SELECT id, name, email, phone
-                 FROM fa_resources
-                 WHERE (name LIKE ? OR email LIKE ?)
-                   AND inactive = 0
-                 LIMIT ?",
+                "SELECT id, name, email, phone"
+                . " FROM fa_resources"
+                . " WHERE (name LIKE ? OR email LIKE ?)"
+                . "   AND inactive = 0"
+                . " LIMIT ?",
                 [$like, $like, $limit]
             );
 
             foreach ($resourceRows as $row) {
                 $results[] = [
                     'contact_type' => CalendarInvitee::TYPE_RESOURCE,
-                    'contact_id'   => (string) $row['id'],
+                    'contact_id'   => (string) ($row['id']    ?? ''),
                     'name'         => (string) ($row['name']  ?? ''),
                     'email'        => (string) ($row['email'] ?? ''),
                     'phone'        => (string) ($row['phone'] ?? ''),

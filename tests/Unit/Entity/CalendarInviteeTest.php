@@ -142,7 +142,7 @@ class CalendarInviteeTest extends TestCase
 
     public function testContactTypeConstants(): void
     {
-        $this->assertSame('fa_user',     CalendarInvitee::TYPE_FA_USER);
+        $this->assertSame('user',         CalendarInvitee::TYPE_FA_USER);
         $this->assertSame('crm_contact', CalendarInvitee::TYPE_CRM_CONTACT);
         $this->assertSame('resource',    CalendarInvitee::TYPE_RESOURCE);
         $this->assertSame('ad_hoc',      CalendarInvitee::TYPE_AD_HOC);

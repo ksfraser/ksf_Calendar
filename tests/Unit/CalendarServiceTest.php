@@ -103,7 +103,7 @@ class CalendarServiceTest extends TestCase
         return array_merge([
             'id'           => '1',
             'entry_id'     => '10',
-            'contact_type' => 'fa_user',
+            'contact_type' => 'user',
             'contact_id'   => '2',
             'name'         => 'Alice Smith',
             'email'        => 'alice@example.com',
@@ -128,59 +128,91 @@ class CalendarServiceTest extends TestCase
         $this->assertSame([], $result);
     }
 
-    public function testSearchInviteesReturnsUsersFromDb(): void
+    public function testSearchInviteesReturnsPersonsFromPersonRegistry(): void
     {
         $this->db->expects($this->atLeastOnce())
             ->method('fetchAll')
             ->willReturnCallback(function (string $sql, array $params) {
-                if (strpos($sql, 'users') !== false) {
+                if (strpos($sql, 'crm_persons') !== false) {
                     return [
-                        ['user_id' => '3', 'real_name' => 'Alice', 'email' => 'alice@example.com'],
+                        [
+                            'person_id'      => '1',
+                            'crm_contact_id' => '10',
+                            'contact_type'   => 'user',
+                            'entity_id'      => '3',
+                            'name'           => 'Alice Smith',
+                            'email'          => 'alice@example.com',
+                            'phone'          => '',
+                            'type_label'     => 'System User',
+                        ],
+                        [
+                            'person_id'      => '1',
+                            'crm_contact_id' => '11',
+                            'contact_type'   => 'crm_contact',
+                            'entity_id'      => '5',
+                            'name'           => 'Alice Smith',
+                            'email'          => 'alice@example.com',
+                            'phone'          => '',
+                            'type_label'     => 'CRM Contact',
+                        ],
                     ];
                 }
-                // CRM / resources — throw to simulate module not installed
+                // Resources — throw to simulate module not installed
                 throw new \RuntimeException('Table not found');
             });
 
         $results = $this->service->searchInvitees('ali');
-        $this->assertCount(1, $results);
-        $this->assertSame(CalendarInvitee::TYPE_FA_USER, $results[0]['contact_type']);
-        $this->assertSame('Alice', $results[0]['name']);
+
+        // One row per hat: user hat and crm_contact hat
+        $this->assertCount(2, $results);
+
+        $types = array_column($results, 'contact_type');
+        $this->assertContains(CalendarInvitee::TYPE_FA_USER, $types);
+        $this->assertContains(CalendarInvitee::TYPE_CRM_CONTACT, $types);
+
+        // contact_id = crm_contacts.id (not entity_id)
+        $this->assertSame('10', $results[0]['contact_id']);
+        $this->assertSame('Alice Smith', $results[0]['name']);
     }
 
-    public function testSearchInviteesSkipsCrmWhenTableMissing(): void
+    public function testSearchInviteesSkipsRegistryWhenTableMissing(): void
     {
-        // Users query returns empty; CRM throws; resources throw.
+        // crm_persons throws; resources succeed
         $this->db->method('fetchAll')
             ->willReturnCallback(function (string $sql) {
-                if (strpos($sql, 'users') !== false) {
-                    return [];
+                if (strpos($sql, 'crm_persons') !== false) {
+                    throw new \RuntimeException('Table not found');
                 }
-                throw new \RuntimeException('Table not found');
+                // Resources succeed
+                return [
+                    ['id' => '7', 'name' => 'Boardroom A', 'email' => '', 'phone' => ''],
+                ];
             });
 
-        $result = $this->service->searchInvitees('test');
-        $this->assertIsArray($result);
-        // No exception propagated; result is empty array.
-        $this->assertCount(0, $result);
+        $results = $this->service->searchInvitees('test');
+        $this->assertIsArray($results);
+        // Resources still returned; no exception propagated
+        $this->assertCount(1, $results);
+        $this->assertSame(CalendarInvitee::TYPE_RESOURCE, $results[0]['contact_type']);
     }
 
-    public function testSearchInviteesReturnsCrmContactsWhenAvailable(): void
+    public function testSearchInviteesReturnsResourcesWhenAvailable(): void
     {
         $this->db->method('fetchAll')
             ->willReturnCallback(function (string $sql) {
-                if (strpos($sql, 'users') !== false) {
+                if (strpos($sql, 'crm_persons') !== false) {
                     return [];
                 }
-                if (strpos($sql, 'fa_crm_contacts') !== false) {
-                    return [['id' => '5', 'full_name' => 'Bob Jones', 'email' => 'bob@example.com', 'phone' => '']];
+                if (strpos($sql, 'fa_resources') !== false) {
+                    return [['id' => '2', 'name' => 'Projector', 'email' => '', 'phone' => '']];
                 }
-                return [];  // Resources — empty
+                return [];
             });
 
-        $results = $this->service->searchInvitees('bob');
+        $results = $this->service->searchInvitees('pro');
         $this->assertCount(1, $results);
-        $this->assertSame(CalendarInvitee::TYPE_CRM_CONTACT, $results[0]['contact_type']);
+        $this->assertSame(CalendarInvitee::TYPE_RESOURCE, $results[0]['contact_type']);
+        $this->assertSame('Projector', $results[0]['name']);
     }
 
     // -------------------------------------------------------------------------
@@ -196,7 +228,7 @@ class CalendarServiceTest extends TestCase
         $this->db->expects($this->once())->method('executeUpdate');
 
         $invitee = $this->service->addInvitee(10, [
-            'contact_type' => 'fa_user',
+            'contact_type' => 'user',
             'contact_id'   => '2',
             'name'         => 'Alice Smith',
             'email'        => 'alice@example.com',
@@ -654,9 +686,13 @@ class CalendarServiceTest extends TestCase
     // -------------------------------------------------------------------------
 
     /**
-     * When viewable_by is set, the SQL must include the OR-subquery that joins
-     * fa_cal_invitees + users so that both own entries and invited entries are
-     * returned.
+     * When viewable_by is set, the SQL must:
+     *  - join fa_cal_invitees → crm_contacts (invitee hat) → crm_contacts (user hat)
+     *  - restrict the user hat by uc.type = 'user' and uc.entity_id = ?
+     *  - still include the assigned_to = ? direct ownership check
+     *
+     * The base date-range query uses 6 params; viewable_by appends exactly 2
+     * (assigned_to as int, entity_id as string).
      *
      * @since 1.3.0
      */
@@ -682,15 +718,20 @@ class CalendarServiceTest extends TestCase
         );
 
         $this->assertNotNull($capturedSql);
-        $this->assertStringContainsString('fa_cal_invitees', $capturedSql);
-        $this->assertStringContainsString('users', $capturedSql);
+
+        // Person-registry JOIN: invitee crm_contacts row → user crm_contacts row
+        $this->assertStringContainsString('crm_contacts ic', $capturedSql);
+        $this->assertStringContainsString('crm_contacts uc', $capturedSql);
+        $this->assertStringContainsString("uc.type = 'user'", $capturedSql);
         $this->assertStringContainsString('assigned_to', $capturedSql);
 
-        // The base date-range query uses 6 params; viewable_by appends 2.
+        // No legacy users-table sub-select
+        $this->assertStringNotContainsString('users', $capturedSql);
+
+        // 6 date params + 2 viewable_by params (assigned_to int, entity_id string)
         $this->assertCount(8, $capturedParams);
-        // Both appended params must equal the user id (cast to int).
-        $this->assertSame(7, $capturedParams[6]);
-        $this->assertSame(7, $capturedParams[7]);
+        $this->assertSame(7,   $capturedParams[6]); // assigned_to (int)
+        $this->assertSame('7', $capturedParams[7]); // uc.entity_id (string)
     }
 
     /**
@@ -765,7 +806,7 @@ class CalendarServiceTest extends TestCase
         );
 
         $this->assertCount(8, $capturedParams);
-        $this->assertSame(5, $capturedParams[6]);
-        $this->assertSame(5, $capturedParams[7]);
+        $this->assertSame(5,   $capturedParams[6]); // assigned_to (int)
+        $this->assertSame('5', $capturedParams[7]); // uc.entity_id (string)
     }
 }
