@@ -276,6 +276,18 @@ class CalendarService
             $sql .= " AND private = 0";
         }
 
+        if (!empty($filters['viewable_by'])) {
+            $userId = (int) $filters['viewable_by'];
+            $sql .= " AND (assigned_to = ?"
+                  . " OR id IN ("
+                  .     "SELECT entry_id FROM " . self::TABLE_INVITEES . " i"
+                  .     " JOIN users u ON u.user_id = i.contact_id"
+                  .     " WHERE u.id = ? AND i.inactive = 0"
+                  . "))";
+            $params[] = $userId;
+            $params[] = $userId;
+        }
+
         $sql .= " ORDER BY start_date ASC";
 
         $rows = $this->db->fetchAll($sql, $params);
