@@ -71,6 +71,11 @@ This document defines the functional requirements for the ksf_Calendar module, p
 - `getEntriesForProject(string $projectId, DateTime $start, DateTime $end)` - Project entries
 - `getEntriesForTask(string $taskId)` - Entries for specific task
 
+**Filters** (passed to `getEntriesForDateRange`):
+- source, source_type, assigned_to, user_id, customer_id, project_id, status
+- `viewable_by` (int): Enforce visibility check — returns only entries the user owns
+  or is invited to (resolved via crm_persons/crm_contacts person registry)
+
 **Priority**: Critical
 
 ### 2.3 Update Entry (FR-ENT-003)
@@ -275,9 +280,90 @@ This document defines the functional requirements for the ksf_Calendar module, p
 
 ---
 
-## 7. Entity Definitions
+## 7. Invitee Management (v1.3.0+)
 
-### 7.1 CalendarEntry Properties
+### 7.1 Add Invitee (FR-INV-001)
+**Requirement**: The system shall add invitees to calendar entries.
+
+**Input**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| entry_id | int | Yes | Calendar entry ID |
+| contact_type | string | Yes | 'user', 'crm_contact', 'resource', 'ad_hoc' |
+| contact_id | int\|null | No | FK to crm_contacts.id (for person-registry types) |
+| name | string | Yes | Display name |
+| email | string | No | Email address |
+| phone | string | No | Phone number |
+| is_organizer | bool | No | Organizer flag |
+
+**Process**:
+1. Lookup entry
+2. Create CalendarInvitee entity
+3. If resource: check availability, auto-accept if free
+4. INSERT row into fa_cal_invitees
+
+**Priority**: High
+
+### 7.2 Update RSVP (FR-INV-002)
+**Requirement**: The system shall update invitee RSVP status.
+
+**Statuses**: pending, accepted, declined, tentative, needs-action
+
+**Process**:
+1. Lookup invitee row
+2. Set rsvp_status
+3. Set responded_at = NOW()
+4. Dispatch RSVP change event (future)
+
+**Priority**: High
+
+### 7.3 Remove Invitee (FR-INV-003)
+**Requirement**: The system shall soft-delete invitees.
+
+**Process**:
+1. Set inactive = 1 on fa_cal_invitees row
+
+**Priority**: High
+
+### 7.4 Search Invitees (FR-INV-004)
+**Requirement**: The system shall search for people/resources to invite.
+
+**Endpoint**: GET search_invitees?q={query}&limit={max}
+
+**Process**:
+1. Query crm_persons JOIN crm_contacts JOIN crm_categories
+2. Return one row per "hat" (contact_type) per matching person
+3. Optionally query fa_resources for matching resources
+4. Return JSON: [{contact_type, contact_id, name, email, phone, type_label}]
+
+**Priority**: Medium
+
+### 7.5 Free/Busy Check (FR-INV-005)
+**Requirement**: The system shall show free/busy time slots for contacts.
+
+**Endpoint**: GET get_free_busy?contact_type=X&contact_id=Y&start=...&end=...
+
+**Process**:
+1. Find all non-declined invitee rows for this contact in date range
+2. Return busy slots: [{start, end}, ...]
+
+**Priority**: Low
+
+### 7.6 My Invitations (FR-INV-006)
+**Requirement**: The system shall show events a user is invited to.
+
+**Process**:
+1. Resolve user ID → crm_contacts.id via person registry
+2. Query fa_cal_invitees + fa_cal_entries where contact_id matches
+3. Return entries with RSVP status
+
+**Priority**: Medium
+
+---
+
+## 8. Entity Definitions
+
+### 8.1 CalendarEntry Properties
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -297,7 +383,7 @@ This document defines the functional requirements for the ksf_Calendar module, p
 | customerId | string\|null | null | Customer link |
 | projectId | string\|null | null | Project link |
 | taskId | string\|null | null | Task link |
-| contactId | string\|null | null | Contact link |
+| contactId | int\|null | null | Contact link (FK to crm_contacts.id) |
 | status | string | 'pending' | Status |
 | priority | string | 'medium' | Priority |
 | category | string | '' | Category |
@@ -309,7 +395,7 @@ This document defines the functional requirements for the ksf_Calendar module, p
 | recurrenceId | int\|null | null | Parent recurrence |
 | inactive | bool | false | Soft delete flag |
 
-### 7.2 CalendarEntry Methods
+### 8.2 CalendarEntry Methods
 
 ```php
 class CalendarEntry
@@ -336,7 +422,7 @@ class CalendarEntry
 }
 ```
 
-### 7.3 CalendarSource Properties
+### 8.3 CalendarSource Properties
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -349,7 +435,7 @@ class CalendarEntry
 | enabled | bool | true | Is enabled |
 | visibility | string | 'private' | Visibility level |
 
-### 7.4 CalendarSource Factory Methods
+### 8.4 CalendarSource Factory Methods
 
 ```php
 class CalendarSource

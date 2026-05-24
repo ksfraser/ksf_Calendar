@@ -90,8 +90,50 @@ Each source has filters for which source_types to include.
 | `add_invitee` | POST (JSON) | Add invitee to entry |
 | `remove_invitee` | POST (JSON) | Remove invitee from entry |
 | `get_entries` | GET | Query entries by date range |
+| `search_invitees` | GET `?q=term&contact_type=crm_contact,fa_user` | Search persons for invitee dropdown |
+| `get_free_busy` | GET `?ids=1,2,3&start=...&end=...` | Check invitee availability |
 
 All POST handlers read from `php://input` (JSON body), not `$_POST`.
+
+### 3b. CalendarInvitee Entity
+
+#### CalendarInvitee
+
+Represents a person invited to a calendar entry:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | int | Primary key (fa_cal_invitees.id) |
+| entry_id | int | FK to fa_cal_entries.id |
+| contact_id | int | FK to 0_crm_contacts.id (person registry) |
+| contact_type | string | 'fa_user', 'crm_contact', 'hrm_employee', 'resource' |
+| response_status | string | 'pending', 'accepted', 'declined', 'tentative' |
+| created_at | datetime | Auto |
+| updated_at | datetime | Auto |
+
+#### Contact Type Registry
+
+The `contact_type` field maps to 0_crm_categories.type:
+
+| invitee contact_type | crm_categories.type | Description |
+|---------------------|---------------------|-------------|
+| fa_user | user | FA system user (0_users) |
+| crm_contact | crm_contact | CRM contact (contacts) |
+| hrm_employee | employee | HRM employee |
+
+Each FA module seeds its own crm_categories row on install (ksf_FA_RBAC seeds 'user', ksf_FA_CRM seeds 'customer'/'family', ksf_FA_HRM seeds 'employee').
+
+#### Person Registry
+
+Invitees are resolved through the FA person registry:
+
+```
+fa_cal_invitees.contact_id → 0_crm_contacts.id
+0_crm_contacts.entity_id → 0_crm_persons.id
+0_crm_contacts.type → 0_crm_categories.type
+```
+
+Every FA user MUST have a person registry entry (crm_persons + crm_contacts with type='user') for `viewable_by` filtering to work correctly. This is provisioned by ksf_FA_RBAC module.
 
 ### 4. Events (PSR-14)
 
@@ -100,6 +142,23 @@ All POST handlers read from `php://input` (JSON body), not `$_POST`.
 - `CalendarEntryDeletedEvent`
 
 ### 5. Database Schema (fa_cal_ prefix)
+
+Tables: fa_cal_entries, fa_cal_invitees
+
+```sql
+CREATE TABLE fa_cal_invitees (
+    id              INT(11) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    entry_id        INT(11) UNSIGNED NOT NULL,
+    contact_id      INT(11) DEFAULT NULL,
+    contact_type    VARCHAR(50) NOT NULL DEFAULT 'fa_user',
+    response_status ENUM('pending','accepted','declined','tentative') NOT NULL DEFAULT 'pending',
+    created_at      DATETIME DEFAULT NULL,
+    updated_at      DATETIME DEFAULT NULL,
+    INDEX idx_entry (entry_id),
+    INDEX idx_contact (contact_id, contact_type),
+    CONSTRAINT fk_invitee_entry FOREIGN KEY (entry_id) REFERENCES fa_cal_entries(id) ON DELETE CASCADE
+);
+```
 
 ---
 
@@ -163,3 +222,45 @@ All exceptions use `Ksfraser\Exceptions\Calendar\*` from the ksfraser/exceptions
 | Multi-calendar | Yes | Yes | Yes | Yes |
 | Recurring events | Yes | Yes | Yes | Yes |
 | Book time vs actuals | Yes | No | No | No |
+
+---
+
+## RBAC Integration
+
+### Viewable_by SQL Filter
+
+Calendar entries are filtered by invitee status using the `viewable_by` parameter:
+
+```sql
+-- viewable_by = 'invited' or viewable_by = current user ID
+-- Two-legged JOIN through person registry:
+
+-- Leg 1: FA user direct match (when viewer is an FA user)
+SELECT e.* FROM fa_cal_entries e
+JOIN fa_cal_invitees i ON i.entry_id = e.id
+WHERE i.contact_id = :viewerContactId
+  AND i.contact_type = 'fa_user'
+
+UNION
+
+-- Leg 2: All other contact types via crm_contacts EXISTS
+SELECT e.* FROM fa_cal_entries e
+WHERE EXISTS (
+    SELECT 1 FROM fa_cal_invitees i
+    JOIN 0_crm_contacts c ON c.id = i.contact_id
+    WHERE i.entry_id = e.id
+      AND c.entity_id = :viewerPersonId
+      AND c.type IN (:contactTypes)
+)
+```
+
+### ksfraser/rbac Integration
+
+When ksfraser/rbac is active, calendar entry visibility is additionally gated by the RBAC `0_rbac_record_access` JOIN (per the standard SQL enforcement pattern). The RBAC check is applied ON TOP of the viewable_by filter — both must pass.
+
+### Module Registration
+
+Calendar registers with RBAC:
+- record_type: 'entry'
+- projections: 'public' (title, start, end, all_day), 'full' (all fields including private flag, description)
+- allow_invite: true

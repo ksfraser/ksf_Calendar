@@ -39,13 +39,14 @@ ksf_Calendar/
 ├── src/Ksfraser/Calendar/
 │   ├── Entity/
 │   │   ├── CalendarEntry.php          # Any calendar entry
+│   │   ├── CalendarInvitee.php        # Invitee (person/resource) with RSVP
 │   │   └── CalendarSource.php         # Filter/view configuration
 │   ├── DTO/
 │   │   └── CalendarEntryDTO.php       # FullCalendar.js ready DTO
 │   ├── Event/
 │   │   └── CalendarEntryEvents.php     # Created/Updated/Deleted
 │   ├── Service/
-│   │   ├── CalendarService.php        # Core CRUD + sync
+│   │   ├── CalendarService.php        # Core CRUD + sync + invitee mgmt
 │   │   └── iCalService.php           # Import/export
 │   ├── Contract/
 │   │   ├── DatabaseAdapterInterface.php
@@ -157,3 +158,49 @@ User clicks event detail panel → "Edit" button
 |-------|---------|
 | fa_cal_entries | All calendar entries (unified) |
 | fa_cal_sources | Calendar views/subscriptions |
+| fa_cal_invitees | Invitees per entry with RSVP tracking |
+| 0_crm_persons (FA core) | Canonical person registry |
+| 0_crm_contacts (FA core) | Person-to-entity xref (user, customer, employee, etc.) |
+
+### fa_cal_invitees Schema (v1.3.0)
+
+`contact_id` stores `0_crm_contacts.id` (INT) for person-registry types (`user`,
+`crm_contact`) and literal entity IDs for `resource` / `ad_hoc` types.
+`contact_type` values match `0_crm_categories.type` (e.g. `'user'`, `'crm_contact'`).
+
+### RBAC / Visibility Integration
+
+The `viewable_by` filter in `CalendarService::getEntriesForDateRange()` uses a
+person-registry subquery to resolve invitee visibility:
+
+```sql
+AND (assigned_to = ?
+     OR id IN (
+         SELECT entry_id FROM fa_cal_invitees i
+         JOIN crm_contacts ic ON ic.id = i.contact_id
+         JOIN crm_contacts uc ON uc.person_id = ic.person_id
+                              AND uc.type = 'user'
+                              AND uc.entity_id = ?
+         WHERE i.inactive = 0
+     ))
+```
+
+This returns entries the user owns OR is invited to (same person appears as
+invitee via any contact type). The subquery returns 0 rows until users are
+provisioned in the person registry by ksf_FA_RBAC.
+
+### Invitee Search
+
+`searchInvitees()` queries the person registry:
+
+```sql
+SELECT cp.name, cp.email, cp.phone, cc.id AS crm_contact_id,
+       cc.type AS contact_type, cat.name AS type_label
+FROM crm_persons cp
+JOIN crm_contacts cc ON cc.person_id = cp.id AND cc.inactive = 0
+JOIN crm_categories cat ON cat.type = cc.type AND cat.action = 'general'
+WHERE (cp.name LIKE ? OR cp.email LIKE ?) AND cp.inactive = 0
+```
+
+Returns one row per "hat" (contact type) per matching person, allowing the
+inviter to choose which role the person plays in the calendar event.

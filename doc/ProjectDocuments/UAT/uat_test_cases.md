@@ -162,3 +162,120 @@
 **Expected Result**:
 - Correct title shown in each mode
 - Submitting in create mode calls `create_entry`; edit mode calls `update_entry`
+
+---
+
+## TC-008: Add Invitees to Entry
+
+**Preconditions**: User has CALENDAR_MANAGE permission, at least one entry exists
+
+**Steps**:
+1. Open an existing event's detail panel
+2. Click "Invite" / "Add Invitee" button
+3. Search for a user by name in the invitee search field
+4. Select the user from results
+5. Click Save
+
+**Expected Result**:
+- Selected user appears in invitees list
+- User can search by name, email, contact type
+- Invitee row stored in fa_cal_invitees
+
+---
+
+## TC-009: Remove Invitee from Entry
+
+**Preconditions**: Entry has at least one invitee
+
+**Steps**:
+1. Open event detail panel
+2. View invitees section
+3. Click "Remove" on an invitee
+4. Confirm removal (if prompted)
+5. Click Save
+
+**Expected Result**:
+- Invitee removed from the entry
+- fa_cal_invitees row deleted or marked inactive
+- Other invitees unchanged
+
+---
+
+## TC-010: Search Invitees
+
+**Preconditions**: Multiple person registry entries exist (users, CRM contacts)
+
+**Steps**:
+1. Open event detail panel
+2. Click "Invite"
+3. Type partial name in search field
+4. View results
+
+**Expected Result**:
+- Results from multiple contact types (fa_user, crm_contact) shown
+- Each result shows type_label (e.g. "System User", "CRM Contact")
+- Results grouped or labeled by contact type
+- The search calls the searchInvitees endpoint
+
+---
+
+## TC-011: Free/Busy Visibility
+
+**Preconditions**: Multiple entries with invitees exist
+
+**Steps**:
+1. Open create event modal
+2. Add invitees to the new event
+3. System checks free/busy via getFreeBusy endpoint
+
+**Expected Result**:
+- Busy times shown for conflicting invitees
+- Free times shown as available
+- Only time range checked (not details of other events)
+- getFreeBusy endpoint returns busy blocks per contact_id
+
+---
+
+## TC-012: Viewable_by Filter (RBAC Integration)
+
+**Preconditions**: Multiple calendar entries, some user is invited to, some not
+
+**Steps**:
+1. Log in as a regular FA user
+2. Navigate to calendar with `viewable_by` filter (e.g. "My Invitations" view)
+
+**Expected Result**:
+- Only entries where user is invited (via fa_cal_invitees → crm_persons → crm_contacts) are shown
+- Non-invited entries are hidden
+- The two-legged person-registry JOIN works correctly
+
+---
+
+## TC-013: My Invitations View
+
+**Preconditions**: User has invitee entries from other users
+
+**Steps**:
+1. Navigate to "My Invitations" calendar view
+2. Browse entries
+
+**Expected Result**:
+- All entries where user is an invitee are displayed
+- Entries show "Invited" badge or indicator
+- User can respond (Accept/Decline/Tentative) to each invitation
+- Response status updates in fa_cal_invitees
+
+---
+
+## TC-014: Contact Type Labels in Search
+
+**Preconditions**: Person registry has entries of multiple contact types
+
+**Steps**:
+1. Open invitee search
+2. Search for a term that matches across contact types
+
+**Expected Result**:
+- Each result shows `type_label` field (e.g. "System User", "CRM Contact", "Resource")
+- Labels come from server-side `r.type_label` (not hardcoded on frontend)
+- Frontend falls back to `typeLabel[r.contact_type] || r.contact_type` if `r.type_label` missing

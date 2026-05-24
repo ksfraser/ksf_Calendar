@@ -46,7 +46,8 @@ ksf_Calendar/
 │           ├── DTO/
 │           ├── Entity/
 │           │   ├── CalendarEntry.php
-│           │   └── CalendarSource.php
+│           │   ├── CalendarSource.php
+│           │   └── CalendarInvitee.php
 │           ├── Event/
 │           ├── Exception/
 │           ├── Repository/
@@ -151,6 +152,46 @@ class CalendarEntry
 }
 ```
 
+#### CalendarInvitee
+```php
+namespace Ksfraser\Calendar\Entity;
+
+class CalendarInvitee
+{
+    // Contact Types
+    const TYPE_USER       = 'user';
+    const TYPE_CRM_CONTACT = 'crm_contact';
+    const TYPE_RESOURCE   = 'resource';
+    const TYPE_AD_HOC     = 'ad_hoc';
+
+    // RSVP Statuses
+    const RSVP_PENDING  = 'pending';
+    const RSVP_ACCEPTED = 'accepted';
+    const RSVP_DECLINED = 'declined';
+    const RSVP_TENTATIVE = 'tentative';
+    const RSVP_NEEDS_ACTION = 'needs-action';
+
+    private ?int $id;
+    private int $entryId;
+    private string $contactType;
+    private ?string $contactId;
+    private string $name;
+    private string $email;
+    private ?string $phone;
+    private string $rsvpStatus;
+    private bool $isOrganizer;
+    private bool $isResource;
+    private ?DateTime $invitedAt;
+    private ?DateTime $respondedAt;
+    private bool $inactive;
+
+    public function __construct(int $entryId, string $contactType, string $name, string $email, ?string $contactId = null);
+    public function toArray(): array;
+    public static function fromArray(array $data): self;
+    public function isResource(): bool;
+    // ... setters with fluent interface
+}
+```
 #### CalendarSource
 ```php
 namespace Ksfraser\Calendar\Entity;
@@ -215,16 +256,22 @@ class CalendarSource
 ```php
 namespace Ksfraser\Calendar\Service;
 
+```php
+namespace Ksfraser\Calendar\Service;
+
 class CalendarService
 {
-    private const TABLE_ENTRIES = 'fa_cal_entries';
-    private const TABLE_SOURCES = 'fa_cal_sources';
+    private const TABLE_ENTRIES  = 'fa_cal_entries';
+    private const TABLE_SOURCES  = 'fa_cal_sources';
+    private const TABLE_INVITEES = 'fa_cal_invitees';
+
+    public const DEFAULT_DURATION_MINUTES = 15;
 
     public function __construct(
-        private readonly DatabaseAdapterInterface $db,
-        private readonly EventDispatcherInterface $events,
-        private readonly LoggerInterface $logger,
-        private readonly ?ProjectServiceInterface $projectService = null
+        DatabaseAdapterInterface $db,
+        EventDispatcherInterface $events,
+        LoggerInterface $logger,
+        ProjectServiceInterface $projectService = null
     );
 
     // Entry Operations
@@ -241,6 +288,14 @@ class CalendarService
     public function getEntriesForTask(string $taskId): array;
     public function getEntryCountByDate(DateTime $date): array;
 
+    // Invitee Operations
+    public function addInvitee(int $entryId, array $data): CalendarInvitee;
+    public function updateRsvp(int $inviteeId, string $rsvpStatus): CalendarInvitee;
+    public function removeInvitee(int $inviteeId): void;
+    public function getInviteesForEntry(int $entryId): array;
+    public function getFreeBusy(string $contactType, string $contactId, DateTime $start, DateTime $end): array;
+    public function searchInvitees(string $query, int $limit = 20): array;
+
     // Source Operations
     public function createSource(array $data): CalendarSource;
     public function getSourcesForUser(string $userId): array;
@@ -248,6 +303,7 @@ class CalendarService
     // Synchronization
     public function syncPMTasks(string $userId): int;
     public function syncCRMActivities(string $userId): int;
+    public function getUnscheduledTasksForUser(string $userId): array;
 }
 ```
 
@@ -397,6 +453,56 @@ interface ProjectServiceInterface
 [Return iCal String]
 ```
 
+### 4.5 Invitee Search & Add Flow
+```
+[User types in search box]
+       |
+       v
+[GET search_invitees?q=...]
+       |
+       v
+[CalendarService.searchInvitees()]
+       |
+       v
+[crm_persons JOIN crm_contacts JOIN crm_categories]
+       |  returns one row per "hat" per person
+       |  (user, crm_contact, etc.)
+       v
+[JSON response: [{contact_type, contact_id, name, email, type_label}]]
+       |
+       v
+[User clicks "Add" on a result]
+       |
+       v
+[POST add_invitee {entry_id, contact_type, contact_id, name, email}]
+       |
+       v
+[INSERT into fa_cal_invitees]
+       |
+       v
+[Resources auto-accept if available; people default to pending]
+```
+
+### 4.6 Visibility / viewable_by Flow
+```
+[User views calendar]
+       |
+       v
+[getEntriesForDateRange(..., viewable_by=userId)]
+       |
+       v
+[Build SQL with visibility subquery:]
+       |  assigned_to = $userId
+       |  OR entry has invitees whose crm_persons also has
+       |     a 'user'-type crm_contacts row with entity_id = $userId
+       |
+       v
+[Only entries user can see are returned]
+       |
+       v
+[RBAC-enforced: default deny via SQL JOIN when ksf_FA_RBAC is active]
+```
+
 ---
 
 ## 5. Database Schema
@@ -420,7 +526,7 @@ CREATE TABLE fa_cal_entries (
     customer_id VARCHAR(50),
     project_id VARCHAR(50),
     task_id VARCHAR(50),
-    contact_id VARCHAR(50),
+    contact_id INT(11) NULL DEFAULT NULL COMMENT 'FK to fa_cal_invitees.contact_id for backward compat; primary resolution via crm_contacts.id',
     status VARCHAR(20) DEFAULT 'pending',
     priority VARCHAR(20) DEFAULT 'medium',
     category VARCHAR(50),
@@ -472,9 +578,58 @@ CREATE TABLE fa_cal_sources (
 );
 ```
 
----
+### 5.3 fa_cal_invitees Table (v1.3.0)
+```sql
+CREATE TABLE fa_cal_invitees (
+    id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    entry_id INT(11) NOT NULL COMMENT 'FK to fa_cal_entries.id',
+    contact_type VARCHAR(20) NOT NULL DEFAULT 'ad_hoc'
+        COMMENT 'user | crm_contact | resource | ad_hoc (matches crm_categories.type)',
+    contact_id INT(11) NULL DEFAULT NULL COMMENT 'FK to crm_contacts.id for person-registry types; entity ID for ad_hoc/resources',
+    name VARCHAR(255) NOT NULL DEFAULT '',
+    email VARCHAR(255) NOT NULL DEFAULT '',
+    phone VARCHAR(50) DEFAULT NULL,
+    rsvp_status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        COMMENT 'pending | accepted | declined | tentative | needs-action',
+    is_organizer TINYINT(1) NOT NULL DEFAULT 0,
+    is_resource TINYINT(1) NOT NULL DEFAULT 0,
+    invited_at DATETIME DEFAULT NULL,
+    responded_at DATETIME DEFAULT NULL,
+    inactive TINYINT(1) NOT NULL DEFAULT 0,
+    INDEX idx_entry (entry_id, inactive),
+    INDEX idx_contact (contact_type, contact_id, inactive),
+    INDEX idx_rsvp (entry_id, rsvp_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
 
-## 6. Event System
+### 5.4 Person Registry Tables (FA core, referenced by invitees)
+
+The FA `0_crm_persons` and `0_crm_contacts` tables form the canonical person
+registry. `fa_cal_invitees.contact_id` is an FK to `0_crm_contacts.id`.
+Resolution of invitees for visibility checks uses the person_id chain:
+
+```
+fa_cal_invitees.contact_id → 0_crm_contacts.id
+                                → person_id → 0_crm_persons.id
+                                                → other 0_crm_contacts rows (e.g. type='user')
+```
+
+### 5.5 RBAC Tables (ksf_FA_RBAC module)
+
+| Table | Purpose |
+|-------|---------|
+| 0_rbac_teams | Team definitions (includes {userId}_individual teams) |
+| 0_rbac_team_members | User membership in teams |
+| 0_rbac_record_access | Per-record capability grants (team → record) |
+| 0_rbac_audit_log | Append-only permission change log |
+
+The `viewable_by` filter in `getEntriesForDateRange()` enforces visibility:
+```
+assigned_to = ? OR the user's crm_contacts 'user' record shares a person_id
+with an invitee's crm_contacts row
+```
+
+---
 
 ### 6.1 Event Classes
 ```php

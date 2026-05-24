@@ -1,16 +1,16 @@
 # ksf_Calendar / ksf_FA_Calendar - RTM (Requirements Traceability Matrix)
 
-## Test Coverage — ksf_Calendar (133 tests, 381 assertions)
+## Test Coverage — ksf_Calendar (137 tests, 402 assertions)
 
 | Test Class | File | Tests |
 |------------|------|-------|
 | CalendarEntry | `CalendarEntryTest.php` | 44 |
-| CalendarService | `CalendarServiceTest.php` | 29 |
+| CalendarService | `CalendarServiceTest.php` | 33 |
 | CalendarSource | `CalendarSourceTest.php` | 24 |
 | CalendarInvitee | `CalendarInviteeTest.php` | 18 |
 | CalendarEntryDTO | `CalendarEntryDTOTest.php` | 12 |
 | CalendarEntryEvents | `CalendarEntryEventsTest.php` | 6 |
-| **Total** | | **133** |
+| **Total** | | **137** |
 
 ## Test Coverage — ksf_FA_Calendar (101 tests, 139 assertions)
 
@@ -35,6 +35,13 @@
 | CAL-007a | Update entry preserves all_day strict comparison | CalendarService | `testUpdateEntryAllDayStrictComparison` |
 | CAL-008 | AJAX CRUD (create / update / delete) | FA CalendarService | CRUD tests |
 | CAL-009 | Invitees on entry | CalendarInvitee | Invitee tests |
+| CAL-010 | viewable_by filter (visibility) | CalendarService | `testViewableByFilterInjectsTwoParams`, `testViewableByFilterCastsStringToInt`, `testViewableByFilterSkippedWhenAbsent` |
+| CAL-011 | searchInvitees (person registry) | CalendarService | `testSearchInviteesReturnsTypeLabel`, `testSearchInviteesShortQueryReturnsEmpty`, `testSearchInviteesIncludesResources`, `testSearchInviteesHandlesDbError` |
+| CAL-012 | Add/remove/update invitee | CalendarInvitee/CalendarService | `testAddInvitee`, `testRemoveInvitee`, `testUpdateRsvp` |
+| CAL-013 | Free/busy check | CalendarService | `testGetFreeBusyReturnsBusySlots` |
+| CAL-014 | My Invitations view | FA CalendarService | TC-014 |
+| CAL-015 | contact_type='user' (was 'fa_user') | CalendarInvitee | `testContactTypeConstants` |
+| CAL-016 | contact_id FK to crm_contacts | CalendarService | viewable_by tests |
 
 ## Bug Fixes Traced
 
@@ -43,3 +50,4 @@
 | end_date always set to now | `isset()` truthy for empty string | `CalendarService::createEntry()` | `testCreateEntryWithEmptyEndDate` |
 | All events appear all-day | `'no'` string is truthy in PHP | `CalendarService::createEntry()` | `testCreateEntryAllDayStrictComparison` |
 | Update ignores all_day field | Missing all_day branch in updateEntry | `CalendarService::updateEntry()` | `testUpdateEntryAllDayStrictComparison` |
+| fhs_L1 can see admin's calendar events | No visibility filter in getEntriesForDateRange | Added `viewable_by` subquery | `testViewableByFilterInjectsTwoParams` |
