@@ -935,6 +935,7 @@ class CalendarService
                     'name'         => (string) ($row['name']           ?? ''),
                     'email'        => (string) ($row['email']          ?? ''),
                     'phone'        => (string) ($row['phone']          ?? ''),
+                    'type_label'   => (string) ($row['type_label']     ?? $row['contact_type'] ?? ''),
                 ];
             }
         } catch (\Exception $e) {
@@ -959,6 +960,7 @@ class CalendarService
                     'name'         => (string) ($row['name']  ?? ''),
                     'email'        => (string) ($row['email'] ?? ''),
                     'phone'        => (string) ($row['phone'] ?? ''),
+                    'type_label'   => 'Resource',
                 ];
             }
         } catch (\Exception $e) {
