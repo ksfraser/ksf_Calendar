@@ -280,6 +280,28 @@ class CalendarEntryTest extends TestCase
         $this->assertSame('renewal', CalendarEntry::TYPE_RENEWAL);
     }
 
+    /**
+     * v1.3.0 — Conference Call and Webinar type constants.
+     *
+     * @since 1.3.0
+     */
+    public function testV130TypeConstants(): void
+    {
+        $this->assertSame('conference_call', CalendarEntry::TYPE_CONFERENCE_CALL);
+        $this->assertSame('webinar', CalendarEntry::TYPE_WEBINAR);
+    }
+
+    /**
+     * v1.3.0 — Call direction constants.
+     *
+     * @since 1.3.0
+     */
+    public function testDirectionConstants(): void
+    {
+        $this->assertSame('inbound',  CalendarEntry::DIRECTION_INBOUND);
+        $this->assertSame('outbound', CalendarEntry::DIRECTION_OUTBOUND);
+    }
+
     public function testStatusConstants(): void
     {
         $this->assertSame('pending', CalendarEntry::STATUS_PENDING);
@@ -305,6 +327,18 @@ class CalendarEntryTest extends TestCase
         $this->assertSame('call_vmail', CalendarEntry::STATUS_CALL_VMAIL);
         $this->assertSame('call_rna_followup', CalendarEntry::STATUS_CALL_RNA_FOLLOWUP);
         $this->assertSame('call_vmail_followup', CalendarEntry::STATUS_CALL_VMAIL_FOLLOWUP);
+    }
+
+    /**
+     * v1.3.0 — Additional call outcome status constants.
+     *
+     * @since 1.3.0
+     */
+    public function testV130CallStatusConstants(): void
+    {
+        $this->assertSame('call_not_completed', CalendarEntry::STATUS_CALL_NOT_COMPLETED);
+        $this->assertSame('call_vmail_full',    CalendarEntry::STATUS_CALL_VMAIL_FULL);
+        $this->assertSame('call_message_left',  CalendarEntry::STATUS_CALL_MESSAGE_LEFT);
     }
 
     public function testShiftTypeConstants(): void
@@ -441,5 +475,629 @@ class CalendarEntryTest extends TestCase
         $this->assertSame('https://meet.example.com/sync', $entry->getOnlineUrl());
         $this->assertSame('+44-20-1234-5678', $entry->getPhoneNumber());
         $this->assertTrue($entry->getSendInvites());
+    }
+
+    // ---------------------------------------------------------------
+    // 1.3.0 fields: direction, meetingNumber, meetingPasscode
+    // ---------------------------------------------------------------
+
+    /**
+     * @since 1.3.0
+     */
+    public function testDefaultsForV130Fields(): void
+    {
+        $this->assertNull($this->entry->getDirection());
+        $this->assertNull($this->entry->getMeetingNumber());
+        $this->assertNull($this->entry->getMeetingPasscode());
+    }
+
+    /**
+     * @since 1.3.0
+     */
+    public function testSetDirectionReturnsSelf(): void
+    {
+        $result = $this->entry->setDirection(CalendarEntry::DIRECTION_OUTBOUND);
+        $this->assertSame($this->entry, $result);
+        $this->assertSame(CalendarEntry::DIRECTION_OUTBOUND, $this->entry->getDirection());
+    }
+
+    /**
+     * @since 1.3.0
+     */
+    public function testSetDirectionAcceptsNull(): void
+    {
+        $this->entry->setDirection(CalendarEntry::DIRECTION_INBOUND);
+        $this->entry->setDirection(null);
+        $this->assertNull($this->entry->getDirection());
+    }
+
+    /**
+     * @since 1.3.0
+     */
+    public function testSetMeetingNumberReturnsSelf(): void
+    {
+        $result = $this->entry->setMeetingNumber('123-456-789');
+        $this->assertSame($this->entry, $result);
+        $this->assertSame('123-456-789', $this->entry->getMeetingNumber());
+    }
+
+    /**
+     * @since 1.3.0
+     */
+    public function testSetMeetingNumberAcceptsNull(): void
+    {
+        $this->entry->setMeetingNumber('999');
+        $this->entry->setMeetingNumber(null);
+        $this->assertNull($this->entry->getMeetingNumber());
+    }
+
+    /**
+     * @since 1.3.0
+     */
+    public function testSetMeetingPasscodeReturnsSelf(): void
+    {
+        $result = $this->entry->setMeetingPasscode('secret99');
+        $this->assertSame($this->entry, $result);
+        $this->assertSame('secret99', $this->entry->getMeetingPasscode());
+    }
+
+    /**
+     * @since 1.3.0
+     */
+    public function testSetMeetingPasscodeAcceptsNull(): void
+    {
+        $this->entry->setMeetingPasscode('abc');
+        $this->entry->setMeetingPasscode(null);
+        $this->assertNull($this->entry->getMeetingPasscode());
+    }
+
+    /**
+     * toArray() must include the v1.3.0 call/conference fields.
+     *
+     * @since 1.3.0
+     */
+    public function testToArrayIncludesV130Fields(): void
+    {
+        $this->entry->setDirection(CalendarEntry::DIRECTION_INBOUND);
+        $this->entry->setMeetingNumber('800-555-0100');
+        $this->entry->setMeetingPasscode('pass1234');
+
+        $arr = $this->entry->toArray();
+
+        $this->assertSame(CalendarEntry::DIRECTION_INBOUND, $arr['direction']);
+        $this->assertSame('800-555-0100', $arr['meeting_number']);
+        $this->assertSame('pass1234',     $arr['meeting_passcode']);
+    }
+
+    /**
+     * fromArray() round-trip must restore v1.3.0 call/conference fields.
+     *
+     * @since 1.3.0
+     */
+    public function testFromArrayRestoresV130Fields(): void
+    {
+        $data = [
+            'source'           => 'user',
+            'source_id'        => '5',
+            'source_type'      => CalendarEntry::TYPE_CONFERENCE_CALL,
+            'title'            => 'Weekly Standup',
+            'start_date'       => '2026-06-01 09:00:00',
+            'direction'        => CalendarEntry::DIRECTION_OUTBOUND,
+            'meeting_number'   => '555-1234',
+            'meeting_passcode' => 'daily99',
+        ];
+
+        $entry = CalendarEntry::fromArray($data);
+
+        $this->assertSame(CalendarEntry::DIRECTION_OUTBOUND, $entry->getDirection());
+        $this->assertSame('555-1234',  $entry->getMeetingNumber());
+        $this->assertSame('daily99',   $entry->getMeetingPasscode());
+    }
+
+    // ---------------------------------------------------------------
+    // 1.3.0 isOpenStatus()
+    // ---------------------------------------------------------------
+
+    /**
+     * Statuses that are always closed regardless of type.
+     *
+     * @since 1.3.0
+     */
+    public function testIsOpenStatusAlwaysClosedStatuses(): void
+    {
+        foreach ([
+            CalendarEntry::STATUS_COMPLETED,
+            CalendarEntry::STATUS_CANCELLED,
+            CalendarEntry::STATUS_NO_SHOW,
+            CalendarEntry::STATUS_MEETING_HELD,
+            CalendarEntry::STATUS_MEETING_NOT_HELD,
+            CalendarEntry::STATUS_CALL_HELD,
+        ] as $status) {
+            $this->assertFalse(
+                CalendarEntry::isOpenStatus(CalendarEntry::TYPE_EVENT, $status),
+                "Expected closed for status '$status'"
+            );
+        }
+    }
+
+    /**
+     * Statuses that are always open regardless of type.
+     *
+     * @since 1.3.0
+     */
+    public function testIsOpenStatusAlwaysOpenStatuses(): void
+    {
+        foreach ([
+            CalendarEntry::STATUS_PENDING,
+            CalendarEntry::STATUS_CONFIRMED,
+            CalendarEntry::STATUS_MEETING_PLANNED,
+            CalendarEntry::STATUS_MEETING_RESCHEDULED,
+            CalendarEntry::STATUS_CALL_PLANNED,
+            CalendarEntry::STATUS_CALL_RNA,
+            CalendarEntry::STATUS_CALL_RNA_FOLLOWUP,
+            CalendarEntry::STATUS_CALL_VMAIL_FOLLOWUP,
+            CalendarEntry::STATUS_CALL_NOT_COMPLETED,
+            CalendarEntry::STATUS_CALL_VMAIL_FULL,
+            CalendarEntry::STATUS_CALL_MESSAGE_LEFT,
+        ] as $status) {
+            $this->assertTrue(
+                CalendarEntry::isOpenStatus(CalendarEntry::TYPE_CALL, $status),
+                "Expected open for status '$status'"
+            );
+        }
+    }
+
+    /**
+     * call_vmail is contextually closed for TYPE_CALL and TYPE_CONFERENCE_CALL,
+     * but open for other types (message delivered, no action for caller).
+     *
+     * @since 1.3.0
+     */
+    public function testIsOpenStatusCallVmailContextual(): void
+    {
+        $this->assertFalse(
+            CalendarEntry::isOpenStatus(CalendarEntry::TYPE_CALL, CalendarEntry::STATUS_CALL_VMAIL),
+            'call_vmail must be closed for TYPE_CALL'
+        );
+        $this->assertFalse(
+            CalendarEntry::isOpenStatus(CalendarEntry::TYPE_CONFERENCE_CALL, CalendarEntry::STATUS_CALL_VMAIL),
+            'call_vmail must be closed for TYPE_CONFERENCE_CALL'
+        );
+        $this->assertTrue(
+            CalendarEntry::isOpenStatus(CalendarEntry::TYPE_EVENT, CalendarEntry::STATUS_CALL_VMAIL),
+            'call_vmail should default to open for unrelated types'
+        );
+    }
+
+    /**
+     * Unknown/custom status values default to open.
+     *
+     * @since 1.3.0
+     */
+    public function testIsOpenStatusUnknownDefaultsToOpen(): void
+    {
+        $this->assertTrue(
+            CalendarEntry::isOpenStatus(CalendarEntry::TYPE_TASK, 'custom_status_xyz')
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // 1.4.0 fields: is_scheduled, parent_entry_id, guest_policy,
+    //               is_billable, billable_rate, billable_currency,
+    //               auto_invoice, sales_order_id
+    // ---------------------------------------------------------------
+
+    /**
+     * Guest policy constants exist with expected values.
+     *
+     * @since 1.4.0
+     */
+    public function testGuestPolicyConstants(): void
+    {
+        $this->assertSame('open',           CalendarEntry::GUEST_POLICY_OPEN);
+        $this->assertSame('invitees_only',  CalendarEntry::GUEST_POLICY_INVITEES_ONLY);
+        $this->assertSame('owner_only',     CalendarEntry::GUEST_POLICY_OWNER_ONLY);
+    }
+
+    /**
+     * v1.4.0 fields default to correct zero/null values.
+     *
+     * @since 1.4.0
+     */
+    public function testDefaultsForV140Fields(): void
+    {
+        $this->assertFalse($this->entry->isScheduled());
+        $this->assertNull($this->entry->getParentEntryId());
+        $this->assertSame(CalendarEntry::GUEST_POLICY_OPEN, $this->entry->getGuestPolicy());
+        $this->assertFalse($this->entry->isBillable());
+        $this->assertNull($this->entry->getBillableRate());
+        $this->assertNull($this->entry->getBillableCurrency());
+        $this->assertFalse($this->entry->isAutoInvoice());
+        $this->assertNull($this->entry->getSalesOrderId());
+    }
+
+    /**
+     * setIsScheduled() is fluent and stores the value.
+     *
+     * @since 1.4.0
+     */
+    public function testSetIsScheduledReturnsSelf(): void
+    {
+        $result = $this->entry->setIsScheduled(true);
+        $this->assertSame($this->entry, $result);
+        $this->assertTrue($this->entry->isScheduled());
+    }
+
+    /**
+     * setParentEntryId() is fluent and accepts int or null.
+     *
+     * @since 1.4.0
+     */
+    public function testSetParentEntryIdReturnsSelf(): void
+    {
+        $result = $this->entry->setParentEntryId(42);
+        $this->assertSame($this->entry, $result);
+        $this->assertSame(42, $this->entry->getParentEntryId());
+    }
+
+    /**
+     * @since 1.4.0
+     */
+    public function testSetParentEntryIdAcceptsNull(): void
+    {
+        $this->entry->setParentEntryId(7);
+        $this->entry->setParentEntryId(null);
+        $this->assertNull($this->entry->getParentEntryId());
+    }
+
+    /**
+     * setGuestPolicy() is fluent and stores the value.
+     *
+     * @since 1.4.0
+     */
+    public function testSetGuestPolicyReturnsSelf(): void
+    {
+        $result = $this->entry->setGuestPolicy(CalendarEntry::GUEST_POLICY_INVITEES_ONLY);
+        $this->assertSame($this->entry, $result);
+        $this->assertSame(CalendarEntry::GUEST_POLICY_INVITEES_ONLY, $this->entry->getGuestPolicy());
+    }
+
+    /**
+     * setIsBillable() is fluent and stores the value.
+     *
+     * @since 1.4.0
+     */
+    public function testSetIsBillableReturnsSelf(): void
+    {
+        $result = $this->entry->setIsBillable(true);
+        $this->assertSame($this->entry, $result);
+        $this->assertTrue($this->entry->isBillable());
+    }
+
+    /**
+     * setBillableRate() is fluent and accepts float or null.
+     *
+     * @since 1.4.0
+     */
+    public function testSetBillableRateReturnsSelf(): void
+    {
+        $result = $this->entry->setBillableRate(125.50);
+        $this->assertSame($this->entry, $result);
+        $this->assertSame(125.50, $this->entry->getBillableRate());
+    }
+
+    /**
+     * @since 1.4.0
+     */
+    public function testSetBillableRateAcceptsNull(): void
+    {
+        $this->entry->setBillableRate(100.0);
+        $this->entry->setBillableRate(null);
+        $this->assertNull($this->entry->getBillableRate());
+    }
+
+    /**
+     * setBillableCurrency() is fluent and accepts string or null.
+     *
+     * @since 1.4.0
+     */
+    public function testSetBillableCurrencyReturnsSelf(): void
+    {
+        $result = $this->entry->setBillableCurrency('CAD');
+        $this->assertSame($this->entry, $result);
+        $this->assertSame('CAD', $this->entry->getBillableCurrency());
+    }
+
+    /**
+     * @since 1.4.0
+     */
+    public function testSetBillableCurrencyAcceptsNull(): void
+    {
+        $this->entry->setBillableCurrency('USD');
+        $this->entry->setBillableCurrency(null);
+        $this->assertNull($this->entry->getBillableCurrency());
+    }
+
+    /**
+     * setAutoInvoice() is fluent and stores the value.
+     *
+     * @since 1.4.0
+     */
+    public function testSetAutoInvoiceReturnsSelf(): void
+    {
+        $result = $this->entry->setAutoInvoice(true);
+        $this->assertSame($this->entry, $result);
+        $this->assertTrue($this->entry->isAutoInvoice());
+    }
+
+    /**
+     * setSalesOrderId() is fluent and accepts string or null.
+     *
+     * @since 1.4.0
+     */
+    public function testSetSalesOrderIdReturnsSelf(): void
+    {
+        $result = $this->entry->setSalesOrderId('SO-2026-001');
+        $this->assertSame($this->entry, $result);
+        $this->assertSame('SO-2026-001', $this->entry->getSalesOrderId());
+    }
+
+    /**
+     * @since 1.4.0
+     */
+    public function testSetSalesOrderIdAcceptsNull(): void
+    {
+        $this->entry->setSalesOrderId('SO-1');
+        $this->entry->setSalesOrderId(null);
+        $this->assertNull($this->entry->getSalesOrderId());
+    }
+
+    /**
+     * toArray() must include all v1.4.0 fields.
+     *
+     * @since 1.4.0
+     */
+    public function testToArrayIncludesV140Fields(): void
+    {
+        $this->entry->setIsScheduled(true);
+        $this->entry->setParentEntryId(10);
+        $this->entry->setGuestPolicy(CalendarEntry::GUEST_POLICY_OWNER_ONLY);
+        $this->entry->setIsBillable(true);
+        $this->entry->setBillableRate(200.00);
+        $this->entry->setBillableCurrency('USD');
+        $this->entry->setAutoInvoice(true);
+        $this->entry->setSalesOrderId('SO-99');
+
+        $arr = $this->entry->toArray();
+
+        $this->assertTrue($arr['is_scheduled']);
+        $this->assertSame(10, $arr['parent_entry_id']);
+        $this->assertSame(CalendarEntry::GUEST_POLICY_OWNER_ONLY, $arr['guest_policy']);
+        $this->assertTrue($arr['is_billable']);
+        $this->assertSame(200.00, $arr['billable_rate']);
+        $this->assertSame('USD', $arr['billable_currency']);
+        $this->assertTrue($arr['auto_invoice']);
+        $this->assertSame('SO-99', $arr['sales_order_id']);
+    }
+
+    /**
+     * fromArray() round-trip must restore all v1.4.0 fields.
+     *
+     * @since 1.4.0
+     */
+    public function testFromArrayRestoresV140Fields(): void
+    {
+        $data = [
+            'source'            => 'user',
+            'source_id'         => '20',
+            'source_type'       => CalendarEntry::TYPE_MEETING,
+            'title'             => 'Billable Strategy Session',
+            'start_date'        => '2026-09-01 14:00:00',
+            'is_scheduled'      => 1,
+            'parent_entry_id'   => 5,
+            'guest_policy'      => CalendarEntry::GUEST_POLICY_INVITEES_ONLY,
+            'is_billable'       => 1,
+            'billable_rate'     => 150.75,
+            'billable_currency' => 'CAD',
+            'auto_invoice'      => 1,
+            'sales_order_id'    => 'SO-2026-042',
+        ];
+
+        $entry = CalendarEntry::fromArray($data);
+
+        $this->assertTrue($entry->isScheduled());
+        $this->assertSame(5, $entry->getParentEntryId());
+        $this->assertSame(CalendarEntry::GUEST_POLICY_INVITEES_ONLY, $entry->getGuestPolicy());
+        $this->assertTrue($entry->isBillable());
+        $this->assertSame(150.75, $entry->getBillableRate());
+        $this->assertSame('CAD', $entry->getBillableCurrency());
+        $this->assertTrue($entry->isAutoInvoice());
+        $this->assertSame('SO-2026-042', $entry->getSalesOrderId());
+    }
+
+    // ---------------------------------------------------------------
+    // v1.6.0 — recurrenceEndDate
+    // ---------------------------------------------------------------
+
+    /**
+     * recurrenceEndDate defaults to null.
+     *
+     * @since 1.6.0
+     */
+    public function testRecurrenceEndDateDefaultsToNull(): void
+    {
+        $entry = $this->makeEntry();
+        $this->assertNull($entry->getRecurrenceEndDate());
+    }
+
+    /**
+     * setRecurrenceEndDate() stores the DateTime and getRecurrenceEndDate()
+     * returns it.
+     *
+     * @since 1.6.0
+     */
+    public function testSetRecurrenceEndDateStoresValue(): void
+    {
+        $date  = new \DateTime('2026-12-31 23:59:59');
+        $entry = $this->makeEntry();
+
+        $result = $entry->setRecurrenceEndDate($date);
+
+        $this->assertSame($entry, $result); // fluent
+        $this->assertSame($date, $entry->getRecurrenceEndDate());
+    }
+
+    /**
+     * setRecurrenceEndDate(null) clears the value.
+     *
+     * @since 1.6.0
+     */
+    public function testSetRecurrenceEndDateAcceptsNull(): void
+    {
+        $entry = $this->makeEntry();
+        $entry->setRecurrenceEndDate(new \DateTime('2026-12-31'));
+        $entry->setRecurrenceEndDate(null);
+
+        $this->assertNull($entry->getRecurrenceEndDate());
+    }
+
+    // ---------------------------------------------------------------
+    // v1.6.0 — recurrenceCount
+    // ---------------------------------------------------------------
+
+    /**
+     * recurrenceCount defaults to null.
+     *
+     * @since 1.6.0
+     */
+    public function testRecurrenceCountDefaultsToNull(): void
+    {
+        $entry = $this->makeEntry();
+        $this->assertNull($entry->getRecurrenceCount());
+    }
+
+    /**
+     * setRecurrenceCount() stores the integer and getRecurrenceCount()
+     * returns it.
+     *
+     * @since 1.6.0
+     */
+    public function testSetRecurrenceCountStoresValue(): void
+    {
+        $entry  = $this->makeEntry();
+        $result = $entry->setRecurrenceCount(10);
+
+        $this->assertSame($entry, $result); // fluent
+        $this->assertSame(10, $entry->getRecurrenceCount());
+    }
+
+    /**
+     * setRecurrenceCount(null) clears the value.
+     *
+     * @since 1.6.0
+     */
+    public function testSetRecurrenceCountAcceptsNull(): void
+    {
+        $entry = $this->makeEntry();
+        $entry->setRecurrenceCount(5);
+        $entry->setRecurrenceCount(null);
+
+        $this->assertNull($entry->getRecurrenceCount());
+    }
+
+    // ---------------------------------------------------------------
+    // v1.6.0 — toArray() / fromArray() round-trip
+    // ---------------------------------------------------------------
+
+    /**
+     * toArray() must include recurrence_end_date and recurrence_count keys.
+     *
+     * @since 1.6.0
+     */
+    public function testToArrayIncludesV160Fields(): void
+    {
+        $date  = new \DateTime('2026-12-31 23:59:59');
+        $entry = $this->makeEntry();
+        $entry->setRecurrenceEndDate($date);
+        $entry->setRecurrenceCount(12);
+
+        $arr = $entry->toArray();
+
+        $this->assertArrayHasKey('recurrence_end_date', $arr);
+        $this->assertArrayHasKey('recurrence_count',    $arr);
+        $this->assertSame('2026-12-31 23:59:59', $arr['recurrence_end_date']);
+        $this->assertSame(12, $arr['recurrence_count']);
+    }
+
+    /**
+     * toArray() must export null for recurrence_end_date and recurrence_count
+     * when they are not set.
+     *
+     * @since 1.6.0
+     */
+    public function testToArrayExportsNullWhenV160FieldsNotSet(): void
+    {
+        $arr = $this->makeEntry()->toArray();
+
+        $this->assertArrayHasKey('recurrence_end_date', $arr);
+        $this->assertArrayHasKey('recurrence_count',    $arr);
+        $this->assertNull($arr['recurrence_end_date']);
+        $this->assertNull($arr['recurrence_count']);
+    }
+
+    /**
+     * fromArray() must restore recurrenceEndDate and recurrenceCount.
+     *
+     * @since 1.6.0
+     */
+    public function testFromArrayRestoresV160Fields(): void
+    {
+        $data = [
+            'source'               => 'user',
+            'source_id'            => '30',
+            'source_type'          => CalendarEntry::TYPE_EVENT,
+            'title'                => 'Weekly Standup',
+            'start_date'           => '2026-07-01 09:00:00',
+            'recurrence_end_date'  => '2026-12-31 09:00:00',
+            'recurrence_count'     => 26,
+        ];
+
+        $entry = CalendarEntry::fromArray($data);
+
+        $this->assertInstanceOf(\DateTime::class, $entry->getRecurrenceEndDate());
+        $this->assertSame('2026-12-31 09:00:00', $entry->getRecurrenceEndDate()->format('Y-m-d H:i:s'));
+        $this->assertSame(26, $entry->getRecurrenceCount());
+    }
+
+    /**
+     * fromArray() must set null for recurrence_end_date when absent.
+     *
+     * @since 1.6.0
+     */
+    public function testFromArraySetsNullForMissingV160Fields(): void
+    {
+        $data = [
+            'source'      => 'user',
+            'source_id'   => '31',
+            'source_type' => CalendarEntry::TYPE_EVENT,
+            'title'       => 'One-off',
+            'start_date'  => '2026-08-01 10:00:00',
+        ];
+
+        $entry = CalendarEntry::fromArray($data);
+
+        $this->assertNull($entry->getRecurrenceEndDate());
+        $this->assertNull($entry->getRecurrenceCount());
+    }
+
+    private function makeEntry(): CalendarEntry
+    {
+        return new CalendarEntry(
+            'user',
+            '5',
+            CalendarEntry::TYPE_EVENT,
+            'Test Entry',
+            new \DateTime('2026-06-01 10:00:00')
+        );
     }
 }

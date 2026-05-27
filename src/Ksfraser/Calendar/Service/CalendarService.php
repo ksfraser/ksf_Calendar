@@ -15,6 +15,9 @@ use DateTime;
 use Ksfraser\Calendar\Entity\CalendarEntry;
 use Ksfraser\Calendar\Entity\CalendarInvitee;
 use Ksfraser\Calendar\Entity\CalendarSource;
+use Ksfraser\Calendar\Entity\CalendarDependency;
+use Ksfraser\Calendar\Entity\CalendarAttachment;
+use Ksfraser\Calendar\Entity\CalendarNotification;
 use Ksfraser\Calendar\Contract\DatabaseAdapterInterface;
 use Ksfraser\Calendar\Contract\ProjectServiceInterface;
 use Ksfraser\Calendar\Event\CalendarEntryCreatedEvent;
@@ -26,9 +29,12 @@ use Psr\Log\LoggerInterface;
 
 class CalendarService
 {
-    private const TABLE_ENTRIES  = 'fa_cal_entries';
-    private const TABLE_SOURCES  = 'fa_cal_sources';
-    private const TABLE_INVITEES = 'fa_cal_invitees';
+    private const TABLE_ENTRIES       = 'fa_cal_entries';
+    private const TABLE_SOURCES       = 'fa_cal_sources';
+    private const TABLE_INVITEES      = 'fa_cal_invitees';
+    private const TABLE_DEPENDENCIES  = 'fa_cal_dependencies';
+    private const TABLE_ATTACHMENTS   = 'fa_cal_attachments';
+    private const TABLE_NOTIFICATIONS = 'fa_cal_notifications';
 
     /**
      * Default entry duration in minutes used when only one boundary is provided.
@@ -64,15 +70,13 @@ class CalendarService
         $this->logger->info('Creating calendar entry', ['title' => $data['title'] ?? '']);
         $this->validateEntryData($data);
 
-        $entryId = $this->getNextEntryId();
-
         $entry = new CalendarEntry(
             $data['source'] ?? CalendarEntry::SOURCE_USER,
-            $data['source_id'] ?? $entryId,
+            $data['source_id'] ?? '',
             $data['source_type'] ?? CalendarEntry::TYPE_EVENT,
             $data['title'],
             isset($data['start_date']) ? new DateTime($data['start_date']) : null,
-            $entryId
+            null
         );
 
         if (array_key_exists('end_date', $data)) {
@@ -82,10 +86,10 @@ class CalendarService
             $entry->setDescription($data['description']);
         }
         if (isset($data['assigned_to'])) {
-            $entry->setAssignedTo($data['assigned_to']);
+            $entry->setAssignedTo((string) $data['assigned_to']);
         }
         if (isset($data['user_id'])) {
-            $entry->setUserId($data['user_id']);
+            $entry->setUserId((string) $data['user_id']);
         }
         if (isset($data['customer_id'])) {
             $entry->setCustomerId($data['customer_id']);
@@ -123,13 +127,58 @@ class CalendarService
         if (isset($data['send_invites'])) {
             $entry->setSendInvites((bool) $data['send_invites']);
         }
+        if (isset($data['direction'])) {
+            $entry->setDirection($data['direction']);
+        }
+        if (array_key_exists('meeting_number', $data)) {
+            $entry->setMeetingNumber($data['meeting_number']);
+        }
+        if (array_key_exists('meeting_passcode', $data)) {
+            $entry->setMeetingPasscode($data['meeting_passcode']);
+        }
+        if (isset($data['is_scheduled'])) {
+            $entry->setIsScheduled((bool) $data['is_scheduled']);
+        }
+        if (isset($data['parent_entry_id'])) {
+            $entry->setParentEntryId((int) $data['parent_entry_id']);
+        }
+        if (isset($data['guest_policy'])) {
+            $entry->setGuestPolicy($data['guest_policy']);
+        }
+        if (isset($data['is_billable'])) {
+            $entry->setIsBillable((bool) $data['is_billable']);
+        }
+        if (isset($data['billable_rate'])) {
+            $entry->setBillableRate((float) $data['billable_rate']);
+        }
+        if (isset($data['billable_currency'])) {
+            $entry->setBillableCurrency($data['billable_currency']);
+        }
+        if (isset($data['auto_invoice'])) {
+            $entry->setAutoInvoice((bool) $data['auto_invoice']);
+        }
+        if (array_key_exists('sales_order_id', $data)) {
+            $entry->setSalesOrderId($data['sales_order_id']);
+        }
+        if (isset($data['reminder'])) {
+            $entry->setReminder(
+                (bool) $data['reminder'],
+                isset($data['reminder_minutes']) ? (int) $data['reminder_minutes'] : 15
+            );
+        }
+        if (isset($data['recurrence_end_date'])) {
+            $entry->setRecurrenceEndDate(new DateTime($data['recurrence_end_date']));
+        }
+        if (isset($data['recurrence_count'])) {
+            $entry->setRecurrenceCount((int) $data['recurrence_count']);
+        }
 
         $this->applyDefaultDuration($entry);
 
         $this->saveEntry($entry);
         $this->events->dispatch(new CalendarEntryCreatedEvent($entry));
 
-        $this->logger->info('Calendar entry created', ['id' => $entryId]);
+        $this->logger->info('Calendar entry created', ['id' => $entry->getId()]);
         return $entry;
     }
 
@@ -165,7 +214,7 @@ class CalendarService
             $entry->setEndDate($data['end_date'] ? new DateTime($data['end_date']) : null);
         }
         if (isset($data['assigned_to'])) {
-            $entry->setAssignedTo($data['assigned_to']);
+            $entry->setAssignedTo((string) $data['assigned_to']);
         }
         if (isset($data['status'])) {
             $entry->setStatus($data['status']);
@@ -190,6 +239,15 @@ class CalendarService
         }
         if (isset($data['send_invites'])) {
             $entry->setSendInvites((bool) $data['send_invites']);
+        }
+        if (isset($data['direction'])) {
+            $entry->setDirection($data['direction']);
+        }
+        if (array_key_exists('meeting_number', $data)) {
+            $entry->setMeetingNumber($data['meeting_number']);
+        }
+        if (array_key_exists('meeting_passcode', $data)) {
+            $entry->setMeetingPasscode($data['meeting_passcode']);
         }
 
         $this->applyDefaultDuration($entry);
@@ -272,6 +330,34 @@ class CalendarService
             $params[] = $filters['status'];
         }
 
+        if (!empty($filters['direction'])) {
+            $sql .= " AND direction = ?";
+            $params[] = $filters['direction'];
+        }
+
+        // status_open: true = open items only, false = closed items only.
+        if (isset($filters['status_open'])) {
+            // Build an IN list of statuses considered open or closed.
+            // We rely on CalendarEntry::isOpenStatus() logic but replicate it in SQL
+            // by explicitly listing the closed statuses (simpler and DB-portable).
+            // Includes v1.3.0 call statuses: call_not_completed, call_vmail_full, call_message_left.
+            if ((bool) $filters['status_open']) {
+                $sql .= " AND status NOT IN ("
+                    . "'completed','cancelled','no_show',"
+                    . "'meeting_held','meeting_not_held',"
+                    . "'call_held','call_vmail',"
+                    . "'call_not_completed','call_vmail_full','call_message_left'"
+                    . ")";
+            } else {
+                $sql .= " AND status IN ("
+                    . "'completed','cancelled','no_show',"
+                    . "'meeting_held','meeting_not_held',"
+                    . "'call_held','call_vmail',"
+                    . "'call_not_completed','call_vmail_full','call_message_left'"
+                    . ")";
+            }
+        }
+
         if (!empty($filters['include_private'])) {
             $sql .= " AND private = 0";
         }
@@ -315,6 +401,75 @@ class CalendarService
         $sql .= " ORDER BY start_date ASC";
 
         $rows = $this->db->fetchAll($sql, $params);
+
+        // invitee_user_id: additionally fetch entries in the date range where this
+        // contact_id is an accepted invitee.  This is done as a separate query and
+        // merged in PHP so that the OR cannot bypass the inactive = 0 guard or the
+        // date-range conditions on the owned-entries branch.
+        //
+        // The separate query applies only inactive = 0 + date range + invitee match;
+        // user_id / assigned_to filters intentionally do NOT apply (the invited entry
+        // belongs to someone else).  source_type and direction filters ARE applied so
+        // per-type views remain correct.
+        if (!empty($filters['invitee_user_id'])) {
+            $invSql = "SELECT e.* FROM " . self::TABLE_ENTRIES . " e"
+                . " WHERE e.inactive = 0"
+                . " AND ("
+                .     "(e.start_date BETWEEN ? AND ?)"
+                .     " OR (e.end_date BETWEEN ? AND ?)"
+                .     " OR (e.start_date <= ? AND e.end_date >= ?)"
+                . ")"
+                . " AND e.id IN ("
+                .     "SELECT entry_id FROM " . self::TABLE_INVITEES
+                .     " WHERE contact_id = ?"
+                .     " AND rsvp_status = 'accepted'"
+                .     " AND inactive = 0"
+                . ")";
+            $invParams = [
+                $start->format('Y-m-d'), $end->format('Y-m-d'),
+                $start->format('Y-m-d'), $end->format('Y-m-d'),
+                $start->format('Y-m-d'), $end->format('Y-m-d'),
+                $filters['invitee_user_id'],
+            ];
+
+            if (!empty($filters['source_type'])) {
+                if (is_array($filters['source_type'])) {
+                    $placeholders = implode(',', array_fill(0, count($filters['source_type']), '?'));
+                    $invSql   .= " AND e.source_type IN ($placeholders)";
+                    $invParams = array_merge($invParams, $filters['source_type']);
+                } else {
+                    $invSql    .= " AND e.source_type = ?";
+                    $invParams[] = $filters['source_type'];
+                }
+            }
+
+            if (!empty($filters['direction'])) {
+                $invSql    .= " AND e.direction = ?";
+                $invParams[] = $filters['direction'];
+            }
+
+            $invSql .= " ORDER BY e.start_date ASC";
+            $invRows = $this->db->fetchAll($invSql, $invParams);
+
+            // Merge by id, de-duplicate (owned entry may also appear in invitee list).
+            $rowsById = [];
+            foreach ($rows as $r) {
+                $rowsById[(int) $r['id']] = $r;
+            }
+            foreach ($invRows as $r) {
+                $rowsById[(int) $r['id']] = $r;
+            }
+
+            usort($rowsById, function (array $a, array $b): int {
+                $ta = isset($a['start_date']) ? strtotime((string) $a['start_date']) : 0;
+                $tb = isset($b['start_date']) ? strtotime((string) $b['start_date']) : 0;
+                return $ta <=> $tb;
+            });
+
+            return array_map(function ($row) {
+                return CalendarEntry::fromArray($row);
+            }, array_values($rowsById));
+        }
 
         return array_map(function($row) {
             return CalendarEntry::fromArray($row);
@@ -524,13 +679,6 @@ class CalendarService
         }
     }
 
-    private function getNextEntryId(): string
-    {
-        $sql = "SELECT MAX(CAST(id AS UNSIGNED)) + 1 as next_id FROM " . self::TABLE_ENTRIES;
-        $result = $this->db->fetchAssoc($sql);
-        return (string) ($result['next_id'] ?? 1);
-    }
-
     /**
      * Fill in the missing date boundary using the configured default duration.
      *
@@ -588,15 +736,21 @@ class CalendarService
         $endDateStr   = $entry->getEndDate()   !== null ? $entry->getEndDate()->format('Y-m-d H:i:s')   : null;
 
         if ($exists) {
-            // UPDATE: 21 SET columns + 1 WHERE id = ? = 22 params total.
+            // UPDATE: 32 SET columns + 1 WHERE id = ? = 33 params total.
             $sql = "UPDATE " . self::TABLE_ENTRIES . " SET
                     title = ?, description = ?, start_date = ?, end_date = ?,
                     all_day = ?, location = ?, online_url = ?, phone_number = ?,
                     send_invites = ?, assigned_to = ?, user_id = ?,
                     customer_id = ?, project_id = ?, task_id = ?, contact_id = ?,
                     status = ?, priority = ?, color = ?, private = ?,
-                    reminder = ?, reminder_minutes = ?, updated_at = NOW()
-                    WHERE id = ?";
+                    reminder = ?, reminder_minutes = ?,
+                    direction = ?, meeting_number = ?, meeting_passcode = ?,
+                    is_scheduled = ?, parent_entry_id = ?, guest_policy = ?,
+                    is_billable = ?, billable_rate = ?, billable_currency = ?,
+                     auto_invoice = ?, sales_order_id = ?,
+                     recurrence_end_date = ?, recurrence_count = ?,
+                     updated_at = NOW()
+                     WHERE id = ?";
 
             $params = [
                 $entry->getTitle(),
@@ -620,18 +774,36 @@ class CalendarService
                 $entry->isPrivate() ? 1 : 0,
                 $entry->hasReminder() ? 1 : 0,
                 $entry->getReminderMinutes(),
+                $entry->getDirection(),
+                $entry->getMeetingNumber(),
+                $entry->getMeetingPasscode(),
+                $entry->isScheduled() ? 1 : 0,
+                $entry->getParentEntryId(),
+                $entry->getGuestPolicy(),
+                $entry->isBillable() ? 1 : 0,
+                $entry->getBillableRate(),
+                $entry->getBillableCurrency(),
+                $entry->isAutoInvoice() ? 1 : 0,
+                $entry->getSalesOrderId(),
+                $entry->getRecurrenceEndDate() !== null ? $entry->getRecurrenceEndDate()->format('Y-m-d H:i:s') : null,
+                $entry->getRecurrenceCount(),
                 $entry->getId() !== null ? (string) $entry->getId() : null,
             ];
         } else {
-            // INSERT: 26 column placeholders (created_at/updated_at use NOW()). 26 params.
+            // INSERT: 39 column placeholders (created_at/updated_at use NOW()). 39 params.
             $sql = "INSERT INTO " . self::TABLE_ENTRIES . " (
                     source, source_id, source_type, title, description,
                     start_date, end_date, all_day, timezone, location,
                     online_url, phone_number, send_invites,
                     assigned_to, user_id, customer_id, project_id, task_id, contact_id,
                     status, priority, category, reminder, reminder_minutes, color, private,
+                    direction, meeting_number, meeting_passcode,
+                    is_scheduled, parent_entry_id, guest_policy,
+                    is_billable, billable_rate, billable_currency,
+                    auto_invoice, sales_order_id,
+                    recurrence_end_date, recurrence_count,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
 
             $params = [
                 $entry->getSource(),
@@ -660,10 +832,31 @@ class CalendarService
                 $entry->getReminderMinutes(),
                 $entry->getColor(),
                 $entry->isPrivate() ? 1 : 0,
+                $entry->getDirection(),
+                $entry->getMeetingNumber(),
+                $entry->getMeetingPasscode(),
+                $entry->isScheduled() ? 1 : 0,
+                $entry->getParentEntryId(),
+                $entry->getGuestPolicy(),
+                $entry->isBillable() ? 1 : 0,
+                $entry->getBillableRate(),
+                $entry->getBillableCurrency(),
+                $entry->isAutoInvoice() ? 1 : 0,
+                $entry->getSalesOrderId(),
+                $entry->getRecurrenceEndDate() !== null ? $entry->getRecurrenceEndDate()->format('Y-m-d H:i:s') : null,
+                $entry->getRecurrenceCount(),
             ];
         }
 
         $this->db->executeUpdate($sql, $params);
+
+        if (!$exists) {
+            // Update the in-memory entry with the real DB-assigned auto-increment id.
+            $realId = (int) $this->db->lastInsertId();
+            if ($realId > 0) {
+                $entry->setId($realId);
+            }
+        }
     }
 
     private function saveSource(CalendarSource $source): void
@@ -791,6 +984,43 @@ class CalendarService
              SET rsvp_status = ?, responded_at = NOW()
              WHERE id = ?",
             [$rsvpStatus, (string) $inviteeId]
+        );
+
+        return $invitee;
+    }
+
+    /**
+     * Update the post-event individual attendance status for an invitee.
+     *
+     * This method does the DB write only.  Business-rule enforcement
+     * (who is allowed to set which status) is the responsibility of the
+     * calling platform layer (FA_Cal_Module::update_individual_status()).
+     *
+     * @param int    $inviteeId      Invitee row ID
+     * @param string $individualStatus One of CalendarInvitee::INDIVIDUAL_STATUS_* constants
+     * @return CalendarInvitee  The updated invitee entity
+     * @throws CalendarException  If the invitee row is not found
+     * @since 1.3.0
+     */
+    public function updateIndividualStatus(int $inviteeId, string $individualStatus): CalendarInvitee
+    {
+        $row = $this->db->fetchAssoc(
+            "SELECT * FROM " . self::TABLE_INVITEES . " WHERE id = ? AND inactive = 0",
+            [(string) $inviteeId]
+        );
+
+        if (!$row) {
+            throw new CalendarException("Invitee $inviteeId not found");
+        }
+
+        $invitee = CalendarInvitee::fromArray($row);
+        $invitee->setIndividualStatus($individualStatus);
+
+        $this->db->executeUpdate(
+            "UPDATE " . self::TABLE_INVITEES . "
+             SET individual_status = ?, individual_status_updated_at = NOW()
+             WHERE id = ?",
+            [$individualStatus, (string) $inviteeId]
         );
 
         return $invitee;
@@ -972,6 +1202,441 @@ class CalendarService
     }
 
     // ---------------------------------------------------------------
+    // Dependency methods (v1.4.0)
+    // ---------------------------------------------------------------
+
+    /**
+     * Create a new dependency link between two calendar entries.
+     *
+     * @param int    $entryId          The dependent entry ID
+     * @param int    $dependsOnEntryId The prerequisite entry ID
+     * @param string $type             One of CalendarDependency::DEPENDENCY_TYPE_* constants
+     * @return CalendarDependency  The newly created dependency with DB-assigned id
+     *
+     * @since 1.4.0
+     */
+    public function addDependency(int $entryId, int $dependsOnEntryId, string $type): CalendarDependency
+    {
+        $dep = new CalendarDependency($entryId, $dependsOnEntryId, $type);
+
+        $this->db->executeUpdate(
+            "INSERT INTO " . self::TABLE_DEPENDENCIES . "
+             (entry_id, depends_on_entry_id, dependency_type, inactive, created_at)
+             VALUES (?, ?, ?, 0, NOW())",
+            [
+                (string) $entryId,
+                (string) $dependsOnEntryId,
+                $type,
+            ]
+        );
+
+        $newId = (int) $this->db->lastInsertId();
+        if ($newId > 0) {
+            $dep->setId($newId);
+        }
+
+        return $dep;
+    }
+
+    /**
+     * Soft-delete a dependency row.
+     *
+     * @param int $dependencyId  The fa_cal_dependencies.id to remove
+     * @return void
+     * @throws CalendarException  If the row does not exist
+     *
+     * @since 1.4.0
+     */
+    public function removeDependency(int $dependencyId): void
+    {
+        $affected = $this->db->executeUpdate(
+            "UPDATE " . self::TABLE_DEPENDENCIES . " SET inactive = 1 WHERE id = ?",
+            [(string) $dependencyId]
+        );
+
+        if ($affected === 0) {
+            throw new CalendarException("Dependency $dependencyId not found");
+        }
+    }
+
+    /**
+     * Return the active dependencies this entry has (i.e. what it depends ON).
+     *
+     * @param int $entryId
+     * @return CalendarDependency[]
+     *
+     * @since 1.4.0
+     */
+    public function getDependenciesForEntry(int $entryId): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT * FROM " . self::TABLE_DEPENDENCIES . "
+             WHERE entry_id = ? AND inactive = 0
+             ORDER BY id ASC",
+            [(string) $entryId]
+        );
+
+        return array_map(function (array $row): CalendarDependency {
+            return CalendarDependency::fromArray($row);
+        }, $rows);
+    }
+
+    /**
+     * Return the active entries that depend ON this entry.
+     *
+     * @param int $entryId
+     * @return CalendarDependency[]
+     *
+     * @since 1.4.0
+     */
+    public function getDependentsForEntry(int $entryId): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT * FROM " . self::TABLE_DEPENDENCIES . "
+             WHERE depends_on_entry_id = ? AND inactive = 0
+             ORDER BY id ASC",
+            [(string) $entryId]
+        );
+
+        return array_map(function (array $row): CalendarDependency {
+            return CalendarDependency::fromArray($row);
+        }, $rows);
+    }
+
+    /**
+     * Return active child entries linked via parent_entry_id.
+     *
+     * @param int $parentEntryId
+     * @return CalendarEntry[]
+     *
+     * @since 1.4.0
+     */
+    public function getChildEntries(int $parentEntryId): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT * FROM " . self::TABLE_ENTRIES . "
+             WHERE parent_entry_id = ? AND inactive = 0
+             ORDER BY start_date ASC",
+            [(string) $parentEntryId]
+        );
+
+        return array_map(function (array $row): CalendarEntry {
+            return CalendarEntry::fromArray($row);
+        }, $rows);
+    }
+
+    // ---------------------------------------------------------------
+    // Attachment methods (v1.5.0)
+    // ---------------------------------------------------------------
+
+    /**
+     * Add a file attachment to a calendar entry.
+     *
+     * @param int   $entryId
+     * @param array $data  Keys: filename (required), file_path (required),
+     *                           file_size, mime_type, uploaded_by
+     * @return CalendarAttachment  The newly created attachment with DB-assigned id
+     * @throws CalendarException   If the entry does not exist
+     *
+     * @since 1.5.0
+     */
+    public function addAttachment(int $entryId, array $data): CalendarAttachment
+    {
+        // Ensure entry exists.
+        $this->getEntry($entryId);
+
+        $att = new CalendarAttachment(
+            $entryId,
+            (string) ($data['filename']  ?? ''),
+            (string) ($data['file_path'] ?? '')
+        );
+
+        if (isset($data['file_size']) && $data['file_size'] !== null) {
+            $att->setFileSize((int) $data['file_size']);
+        }
+        if (isset($data['mime_type'])) {
+            $att->setMimeType((string) $data['mime_type']);
+        }
+        if (isset($data['uploaded_by'])) {
+            $att->setUploadedBy((string) $data['uploaded_by']);
+        }
+
+        $this->db->executeUpdate(
+            "INSERT INTO " . self::TABLE_ATTACHMENTS . "
+             (entry_id, filename, file_path, file_size, mime_type, uploaded_by, uploaded_at, inactive)
+             VALUES (?, ?, ?, ?, ?, ?, NOW(), 0)",
+            [
+                (string) $entryId,
+                $att->getFilename(),
+                $att->getFilePath(),
+                $att->getFileSize(),
+                $att->getMimeType(),
+                $att->getUploadedBy(),
+            ]
+        );
+
+        $newId = (int) $this->db->lastInsertId();
+        if ($newId > 0) {
+            $att->setId($newId);
+        }
+
+        return $att;
+    }
+
+    /**
+     * Soft-delete an attachment row.
+     *
+     * @param int $attachmentId
+     * @return void
+     * @throws CalendarException  If the row does not exist
+     *
+     * @since 1.5.0
+     */
+    public function removeAttachment(int $attachmentId): void
+    {
+        $affected = $this->db->executeUpdate(
+            "UPDATE " . self::TABLE_ATTACHMENTS . " SET inactive = 1 WHERE id = ?",
+            [(string) $attachmentId]
+        );
+
+        if ($affected === 0) {
+            throw new CalendarException("Attachment $attachmentId not found");
+        }
+    }
+
+    /**
+     * Return all active attachments for an entry.
+     *
+     * @param int $entryId
+     * @return CalendarAttachment[]
+     *
+     * @since 1.5.0
+     */
+    public function getAttachmentsForEntry(int $entryId): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT * FROM " . self::TABLE_ATTACHMENTS . "
+             WHERE entry_id = ? AND inactive = 0
+             ORDER BY id ASC",
+            [(string) $entryId]
+        );
+
+        return array_map(function (array $row): CalendarAttachment {
+            return CalendarAttachment::fromArray($row);
+        }, $rows);
+    }
+
+    // ---------------------------------------------------------------
+    // Notification methods (v1.5.0)
+    // ---------------------------------------------------------------
+
+    /**
+     * Add a notification rule to a calendar entry.
+     *
+     * invitee_id = null → entry-level (applies to all invitees).
+     * invitee_id set   → per-invitee override for that specific invitee.
+     *
+     * @param int   $entryId
+     * @param array $data  Keys: notification_type (required), minutes_before (required),
+     *                           invitee_id (optional), notify_at (optional)
+     * @return CalendarNotification  The newly created notification with DB-assigned id
+     * @throws CalendarException     If the entry does not exist
+     *
+     * @since 1.5.0
+     */
+    public function addNotification(int $entryId, array $data): CalendarNotification
+    {
+        // Ensure entry exists.
+        $this->getEntry($entryId);
+
+        $notif = new CalendarNotification(
+            $entryId,
+            (string) ($data['notification_type'] ?? CalendarNotification::TYPE_EMAIL),
+            (int) ($data['minutes_before'] ?? 15)
+        );
+
+        if (isset($data['invitee_id']) && $data['invitee_id'] !== null) {
+            $notif->setInviteeId((int) $data['invitee_id']);
+        }
+        if (isset($data['notify_at']) && $data['notify_at'] !== null) {
+            $notif->setNotifyAt(new \DateTime($data['notify_at']));
+        }
+
+        $notifyAtStr = $notif->getNotifyAt() !== null
+            ? $notif->getNotifyAt()->format('Y-m-d H:i:s')
+            : null;
+
+        $this->db->executeUpdate(
+            "INSERT INTO " . self::TABLE_NOTIFICATIONS . "
+             (entry_id, invitee_id, notification_type, minutes_before,
+              notify_at, sent_at, inactive, created_at)
+             VALUES (?, ?, ?, ?, ?, NULL, 0, NOW())",
+            [
+                (string) $entryId,
+                $notif->getInviteeId() !== null ? (string) $notif->getInviteeId() : null,
+                $notif->getNotificationType(),
+                (string) $notif->getMinutesBefore(),
+                $notifyAtStr,
+            ]
+        );
+
+        $newId = (int) $this->db->lastInsertId();
+        if ($newId > 0) {
+            $notif->setId($newId);
+        }
+
+        return $notif;
+    }
+
+    /**
+     * Soft-delete a notification row.
+     *
+     * @param int $notificationId
+     * @return void
+     * @throws CalendarException  If the row does not exist
+     *
+     * @since 1.5.0
+     */
+    public function removeNotification(int $notificationId): void
+    {
+        $affected = $this->db->executeUpdate(
+            "UPDATE " . self::TABLE_NOTIFICATIONS . " SET inactive = 1 WHERE id = ?",
+            [(string) $notificationId]
+        );
+
+        if ($affected === 0) {
+            throw new CalendarException("Notification $notificationId not found");
+        }
+    }
+
+    /**
+     * Return all active notifications for an entry.
+     *
+     * @param int $entryId
+     * @return CalendarNotification[]
+     *
+     * @since 1.5.0
+     */
+    public function getNotificationsForEntry(int $entryId): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT * FROM " . self::TABLE_NOTIFICATIONS . "
+             WHERE entry_id = ? AND inactive = 0
+             ORDER BY id ASC",
+            [(string) $entryId]
+        );
+
+        return array_map(function (array $row): CalendarNotification {
+            return CalendarNotification::fromArray($row);
+        }, $rows);
+    }
+
+    /**
+     * Update a notification row (minutes_before and/or notification_type).
+     *
+     * @param int   $notificationId
+     * @param array $data  Keys: minutes_before, notification_type, invitee_id, notify_at
+     * @return CalendarNotification  The updated entity
+     * @throws CalendarException     If the row does not exist
+     *
+     * @since 1.5.0
+     */
+    public function updateNotification(int $notificationId, array $data): CalendarNotification
+    {
+        $row = $this->db->fetchAssoc(
+            "SELECT * FROM " . self::TABLE_NOTIFICATIONS . " WHERE id = ? AND inactive = 0",
+            [(string) $notificationId]
+        );
+
+        if (!$row) {
+            throw new CalendarException("Notification $notificationId not found");
+        }
+
+        $notif = CalendarNotification::fromArray($row);
+
+        if (isset($data['minutes_before'])) {
+            $notif->setMinutesBefore((int) $data['minutes_before']);
+        }
+        if (isset($data['notification_type'])) {
+            $notif->setNotificationType((string) $data['notification_type']);
+        }
+        if (array_key_exists('invitee_id', $data)) {
+            $notif->setInviteeId($data['invitee_id'] !== null ? (int) $data['invitee_id'] : null);
+        }
+        if (array_key_exists('notify_at', $data)) {
+            $notif->setNotifyAt($data['notify_at'] !== null ? new \DateTime($data['notify_at']) : null);
+        }
+
+        $notifyAtStr = $notif->getNotifyAt() !== null
+            ? $notif->getNotifyAt()->format('Y-m-d H:i:s')
+            : null;
+
+        $this->db->executeUpdate(
+            "UPDATE " . self::TABLE_NOTIFICATIONS . "
+             SET notification_type = ?, minutes_before = ?, invitee_id = ?, notify_at = ?
+             WHERE id = ?",
+            [
+                $notif->getNotificationType(),
+                (string) $notif->getMinutesBefore(),
+                $notif->getInviteeId() !== null ? (string) $notif->getInviteeId() : null,
+                $notifyAtStr,
+                (string) $notificationId,
+            ]
+        );
+
+        return $notif;
+    }
+
+    // ---------------------------------------------------------------
+    // v1.6.0 — Reminder entry creation
+    // ---------------------------------------------------------------
+
+    /**
+     * Create a reminder child entry linked to a parent.
+     *
+     * The reminder entry is derived from the parent's title and start date,
+     * with its own start_date set to (parent_start - minutesBefore) so that
+     * it appears on the calendar at the appropriate alert time.
+     *
+     * @param int $parentEntryId The parent calendar entry
+     * @param int $minutesBefore How many minutes before the parent to trigger
+     * @return CalendarEntry       The newly-created reminder entry
+     * @throws CalendarException   If the parent entry does not exist
+     *
+     * @since 1.6.0
+     */
+    public function createReminderEntry(int $parentEntryId, int $minutesBefore): CalendarEntry
+    {
+        $parent = $this->getEntry($parentEntryId);
+
+        $parentStart = $parent->getStartDate();
+
+        $reminderTime = clone $parentStart;
+        $reminderTime->modify("-{$minutesBefore} minutes");
+
+        $data = [
+            'source'           => $parent->getSource(),
+            'source_id'        => $parent->getSourceId(),
+            'source_type'      => CalendarEntry::TYPE_REMINDER,
+            'title'            => 'Reminder: ' . $parent->getTitle(),
+            'description'      => $parent->getDescription(),
+            'start_date'       => $reminderTime->format('Y-m-d H:i:s'),
+            'end_date'         => $reminderTime->format('Y-m-d H:i:s'),
+            'all_day'          => 'no',
+            'location'         => $parent->getLocation(),
+            'status'           => 'pending',
+            'priority'         => $parent->getPriority(),
+            'color'            => $parent->getColor(),
+            'private'          => $parent->isPrivate(),
+            'reminder'         => true,
+            'reminder_minutes' => $minutesBefore,
+            'parent_entry_id'  => $parentEntryId,
+        ];
+
+        return $this->createEntry($data);
+    }
+
+    // ---------------------------------------------------------------
     // Private helpers
     // ---------------------------------------------------------------
 
@@ -1010,8 +1675,9 @@ class CalendarService
         $this->db->executeUpdate(
             "INSERT INTO " . self::TABLE_INVITEES . "
              (entry_id, contact_type, contact_id, name, email, phone,
-              rsvp_status, is_organizer, is_resource, invited_at, inactive)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+              rsvp_status, is_organizer, is_resource, invited_at,
+              individual_status, inactive)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
             [
                 $data['entry_id'],
                 $data['contact_type'],
@@ -1023,6 +1689,7 @@ class CalendarService
                 $data['is_organizer'] ? 1 : 0,
                 $data['is_resource']  ? 1 : 0,
                 $data['invited_at'],
+                $data['individual_status'],
             ]
         );
     }
