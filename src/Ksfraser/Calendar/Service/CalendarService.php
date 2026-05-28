@@ -176,6 +176,28 @@ class CalendarService
         $this->applyDefaultDuration($entry);
 
         $this->saveEntry($entry);
+
+        // Auto-invite the assigned_to user so their free/busy shows in
+        // the availability grid when creating events for other users.
+        $assignedTo = $entry->getAssignedTo();
+        if ($assignedTo !== null && $assignedTo !== '') {
+            try {
+                $this->addInvitee($entry->getId(), [
+                    'contact_type' => CalendarInvitee::TYPE_FA_USER,
+                    'contact_id'   => $assignedTo,
+                    'name'         => '',
+                    'email'        => '',
+                    'rsvp_status'  => CalendarInvitee::RSVP_ACCEPTED,
+                ]);
+            } catch (\Exception $e) {
+                $this->logger->warning('Could not auto-add owner invitee', [
+                    'entry' => $entry->getId(),
+                    'user'  => $assignedTo,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         $this->events->dispatch(new CalendarEntryCreatedEvent($entry));
 
         $this->logger->info('Calendar entry created', ['id' => $entry->getId()]);
@@ -363,39 +385,41 @@ class CalendarService
         }
 
         if (!empty($filters['viewable_by'])) {
-            $userId = (int) $filters['viewable_by'];
+            $userId    = (int) $filters['viewable_by'];
+            $userIdStr = (string) $userId;
 
-            // Visibility subquery — resolves invitees via FA person registry.
+            // Visibility subquery — resolves invitees via direct user match
+            // or FA person registry.
             //
-            // fa_cal_invitees.contact_id stores 0_crm_contacts.id (INT).
-            // The person registry links every "hat" (user, crm_contact, etc.)
-            // to a canonical crm_persons row via person_id.
+            // fa_cal_invitees.contact_id stores:
+            //   - user type: the FA numeric user ID (e.g. "1") via TYPE_FA_USER
+            //   - crm_contact type: crm_contacts.id (e.g. "42") via TYPE_CRM_CONTACT
             //
             // To find entries visible to $userId:
             //   assigned_to = $userId  (direct ownership)
-            //   OR the entry has an invitee whose crm_persons row also has
-            //   a 'user' hat whose entity_id = $userId (numeric 0_users.id).
-            //
-            // entity_id is VARCHAR in 0_crm_contacts, so compare as string.
-            //
-            // This subquery is inoperative (matches 0 rows for the JOIN path)
-            // until the user has been provisioned in crm_contacts by
-            // ksf_FA_RBAC.  assigned_to is still respected in that case.
-            //
-            // @see fa_person_registry_categories.sql — 'user' crm_category
-            // @see TODO-AMB-010 Users-to-Contacts provisioning
+            //   OR i.contact_type = 'user' AND i.contact_id = $userIdStr
+            //   OR other contact types: person-registry JOIN to user hat
             $sql .= " AND (assigned_to = ?"
                   . " OR id IN ("
                   .     "SELECT entry_id FROM " . self::TABLE_INVITEES . " i"
-                  .     " JOIN crm_contacts ic ON ic.id = i.contact_id"
-                  .     " JOIN crm_contacts uc ON uc.person_id = ic.person_id"
-                  .                            " AND uc.type = 'user'"
-                  .                            " AND uc.entity_id = ?"
                   .     " WHERE i.inactive = 0"
+                  .     " AND ("
+                  .         "(i.contact_type = 'user' AND i.contact_id = ?)"
+                  .         " OR"
+                  .         "(i.contact_type != 'user' AND EXISTS ("
+                  .             "SELECT 1 FROM crm_contacts ic"
+                  .             " JOIN crm_contacts uc"
+                  .                " ON uc.person_id = ic.person_id"
+                  .               " AND uc.type = 'user'"
+                  .               " AND uc.entity_id = ?"
+                  .             " WHERE ic.id = i.contact_id"
+                  .         "))"
+                  .     ")"
                   . "))";
 
             $params[] = $userId;
-            $params[] = (string) $userId;
+            $params[] = $userIdStr;
+            $params[] = $userIdStr;
         }
 
         $sql .= " ORDER BY start_date ASC";
@@ -411,7 +435,13 @@ class CalendarService
         // user_id / assigned_to filters intentionally do NOT apply (the invited entry
         // belongs to someone else).  source_type and direction filters ARE applied so
         // per-type views remain correct.
+        //
+        // fa_cal_invitees.contact_id stores:
+        //   - user type: the FA numeric user ID (e.g. "1") via TYPE_FA_USER
+        //   - crm_contact type: crm_contacts.id (e.g. "42") via TYPE_CRM_CONTACT
+        // The subquery handles both via an OR branch.
         if (!empty($filters['invitee_user_id'])) {
+            $invStr = (string) $filters['invitee_user_id'];
             $invSql = "SELECT e.* FROM " . self::TABLE_ENTRIES . " e"
                 . " WHERE e.inactive = 0"
                 . " AND ("
@@ -420,16 +450,28 @@ class CalendarService
                 .     " OR (e.start_date <= ? AND e.end_date >= ?)"
                 . ")"
                 . " AND e.id IN ("
-                .     "SELECT entry_id FROM " . self::TABLE_INVITEES
-                .     " WHERE contact_id = ?"
-                .     " AND rsvp_status = 'accepted'"
-                .     " AND inactive = 0"
+                .     "SELECT i.entry_id FROM " . self::TABLE_INVITEES . " i"
+                .     " WHERE i.rsvp_status = 'accepted'"
+                .     " AND i.inactive = 0"
+                .     " AND ("
+                .         "(i.contact_type = 'user' AND i.contact_id = ?)"
+                .         " OR"
+                .         "(i.contact_type != 'user' AND EXISTS ("
+                .             "SELECT 1 FROM crm_contacts ic"
+                .             " JOIN crm_contacts uc"
+                .                " ON uc.person_id = ic.person_id"
+                .               " AND uc.type = 'user'"
+                .               " AND uc.entity_id = ?"
+                .             " WHERE ic.id = i.contact_id"
+                .         "))"
+                .     ")"
                 . ")";
             $invParams = [
                 $start->format('Y-m-d'), $end->format('Y-m-d'),
                 $start->format('Y-m-d'), $end->format('Y-m-d'),
                 $start->format('Y-m-d'), $end->format('Y-m-d'),
-                $filters['invitee_user_id'],
+                $invStr,
+                $invStr,
             ];
 
             if (!empty($filters['source_type'])) {
@@ -1119,14 +1161,21 @@ class CalendarService
      * Silently skips the person registry if crm_persons is unavailable.
      * Silently skips resources if fa_resources is unavailable.
      *
+     * When $contactTypes is non-empty, the person query is filtered to only
+     * include rows whose cc.type matches the given types. This allows each
+     * platform module (CRM, HRM, etc.) to declare which contact types it owns
+     * via the 'calendar_invitee_contact_types' hook and have the calendar
+     * search only those types rather than querying the full person registry.
+     *
      * Result rows: [contact_type, contact_id (= crm_contacts.id), name, email, phone]
      *
-     * @param string $query   The search string (minimum 2 characters)
-     * @param int    $limit   Maximum rows to return (default 20)
+     * @param string   $query        The search string (minimum 2 characters)
+     * @param int      $limit        Maximum rows to return (default 20)
+     * @param string[] $contactTypes Optional list of cc.type values to filter by
      * @return array<int, array{contact_type: string, contact_id: string, name: string, email: string, phone: string}>
      * @since 1.3.0
      */
-    public function searchInvitees(string $query, int $limit = 20): array
+    public function searchInvitees(string $query, int $limit = 20, array $contactTypes = []): array
     {
         if (strlen($query) < 2) {
             return [];
@@ -1139,6 +1188,15 @@ class CalendarService
         // Returns one row per "hat" per person.
         // contact_id = crm_contacts.id (the row the invitee slot will reference).
         try {
+            $typeCondition = '';
+            $personParams  = [$like, $like];
+            if (!empty($contactTypes)) {
+                $placeholders  = implode(',', array_fill(0, count($contactTypes), '?'));
+                $typeCondition = " AND cc.type IN ($placeholders)";
+                $personParams  = array_merge($personParams, $contactTypes);
+            }
+            $personParams[] = $limit;
+
             $personRows = $this->db->fetchAll(
                 "SELECT cp.id       AS person_id,"
                 . "     cc.id       AS crm_contact_id,"
@@ -1153,9 +1211,10 @@ class CalendarService
                 . " JOIN crm_categories cat ON cat.type = cc.type AND cat.action = 'general'"
                 . " WHERE (cp.name LIKE ? OR cp.email LIKE ?)"
                 . "   AND cp.inactive = 0"
+                . $typeCondition
                 . " ORDER BY cp.name, cc.type"
                 . " LIMIT ?",
-                [$like, $like, $limit]
+                $personParams
             );
 
             foreach ($personRows as $row) {

@@ -24,6 +24,7 @@ use DateTime;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
 use Ksfraser\Calendar\Service\CalendarService;
+use Ksfraser\Calendar\Entity\CalendarEntry;
 use Ksfraser\Calendar\Entity\CalendarInvitee;
 use Ksfraser\Calendar\Contract\DatabaseAdapterInterface;
 use Ksfraser\Calendar\Exception\CalendarException;
@@ -634,6 +635,92 @@ class CalendarServiceTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // Owner auto-invitee: assigned_to user becomes an invitee (v1.6.0)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Helper: stub DB calls for createEntry when assigned_to triggers
+     * the auto-invitee path (addInvitee → getEntry + saveInvitee).
+     */
+    private function stubCreateEntryWithAutoInviteeDb(): void
+    {
+        $row = $this->makeEntryRow(['assigned_to' => '5']);
+        $this->db->method('fetchAssoc')
+            ->willReturnCallback(function (string $sql) use ($row) {
+                if (strpos($sql, 'MAX') !== false) {
+                    return ['next_id' => '1'];
+                }
+                if (strpos($sql, 'SELECT *') !== false) {
+                    return $row; // getEntry for addInvitee
+                }
+                return null; // exists check for saveEntry
+            });
+        $this->db->method('fetchAll')->willReturn([]);
+        $this->db->method('executeUpdate')->willReturn(1);
+        $this->db->method('lastInsertId')->willReturn('99');
+    }
+
+    /**
+     * When assigned_to is set, createEntry must auto-add an invitee with
+     * contact_type = 'user' (TYPE_FA_USER) and rsvp_status = 'accepted'.
+     *
+     * @since 1.6.0
+     */
+    public function testCreateEntryAutoInvitesAssignedToUser(): void
+    {
+        $executeCalls = 0;
+        $this->stubCreateEntryWithAutoInviteeDb();
+
+        $this->db->method('executeUpdate')
+            ->willReturnCallback(function () use (&$executeCalls) {
+                $executeCalls++;
+                return 1;
+            });
+
+        $entry = $this->service->createEntry([
+            'title'       => 'Team Meeting',
+            'start_date'  => '2026-06-01 10:00:00',
+            'end_date'    => '2026-06-01 11:00:00',
+            'assigned_to' => '5',
+        ]);
+
+        $this->assertInstanceOf(CalendarEntry::class, $entry);
+        $this->assertSame('5', $entry->getAssignedTo());
+
+        // Two executeUpdate calls: one for entry INSERT, one for invitee INSERT.
+        $this->assertSame(2, $executeCalls);
+    }
+
+    /**
+     * When assigned_to is NOT set, no auto-invitee is added.
+     *
+     * @since 1.6.0
+     */
+    public function testCreateEntrySkipsAutoInviteeWhenNoAssignedTo(): void
+    {
+        $executeCalls = 0;
+        $this->stubCreateEntryDb();
+
+        $this->db->method('executeUpdate')
+            ->willReturnCallback(function () use (&$executeCalls) {
+                $executeCalls++;
+                return 1;
+            });
+
+        $entry = $this->service->createEntry([
+            'title'      => 'Personal Note',
+            'start_date' => '2026-06-01 10:00:00',
+            'end_date'   => '2026-06-01 11:00:00',
+        ]);
+
+        $this->assertInstanceOf(CalendarEntry::class, $entry);
+        $this->assertEmpty($entry->getAssignedTo());
+
+        // Only one executeUpdate: entry INSERT only.
+        $this->assertSame(1, $executeCalls);
+    }
+
+    // -------------------------------------------------------------------------
     // updateEntry — all_day handling (new in v1.2)
     // -------------------------------------------------------------------------
 
@@ -719,7 +806,9 @@ class CalendarServiceTest extends TestCase
 
         $this->assertNotNull($capturedSql);
 
-        // Person-registry JOIN: invitee crm_contacts row → user crm_contacts row
+        // Direct user match: i.contact_type = 'user' AND i.contact_id = ?
+        $this->assertStringContainsString("contact_type = 'user'", $capturedSql);
+        // Person-registry fallback for other contact types
         $this->assertStringContainsString('crm_contacts ic', $capturedSql);
         $this->assertStringContainsString('crm_contacts uc', $capturedSql);
         $this->assertStringContainsString("uc.type = 'user'", $capturedSql);
@@ -728,10 +817,39 @@ class CalendarServiceTest extends TestCase
         // No legacy users-table sub-select
         $this->assertStringNotContainsString('users', $capturedSql);
 
-        // 6 date params + 2 viewable_by params (assigned_to int, entity_id string)
-        $this->assertCount(8, $capturedParams);
+        // 6 date params + 3 viewable_by params (assigned_to int, fa_user contact_id, entity_id)
+        $this->assertCount(9, $capturedParams);
         $this->assertSame(7,   $capturedParams[6]); // assigned_to (int)
-        $this->assertSame('7', $capturedParams[7]); // uc.entity_id (string)
+        $this->assertSame('7', $capturedParams[7]); // user i.contact_id (string)
+        $this->assertSame('7', $capturedParams[8]); // uc.entity_id (string)
+    }
+
+    /**
+     * Non-integer viewable_by values are cast to int; a string '3' must behave
+     * identically to integer 3.
+     *
+     * @since 1.3.0
+     */
+    public function testViewableByFilterCastsStringToInt(): void
+    {
+        $capturedParams = null;
+
+        $this->db->method('fetchAll')
+            ->willReturnCallback(function (string $sql, array $params) use (&$capturedParams) {
+                $capturedParams = $params;
+                return [];
+            });
+
+        $this->service->getEntriesForDateRange(
+            new DateTime('2026-05-01'),
+            new DateTime('2026-05-31'),
+            ['viewable_by' => '5']
+        );
+
+        $this->assertCount(9, $capturedParams);
+        $this->assertSame(5,   $capturedParams[6]); // assigned_to (int)
+        $this->assertSame('5', $capturedParams[7]); // user i.contact_id (string)
+        $this->assertSame('5', $capturedParams[8]); // uc.entity_id (string)
     }
 
     /**
@@ -783,30 +901,467 @@ class CalendarServiceTest extends TestCase
         $this->assertStringNotContainsString('fa_cal_invitees', $capturedSql);
     }
 
+    // =========================================================================
+    // invitee_user_id filter — getEntriesForDateRange
+    // =========================================================================
+
     /**
-     * Non-integer viewable_by values are cast to int; a string '3' must behave
-     * identically to integer 3.
+     * When invitee_user_id is set, a second query is run merging entries
+     * where this user is an accepted invitee. The SQL must handle both
+     * 'user' contact type (direct contact_id match via TYPE_FA_USER) and
+     * other types (person-registry join).
      *
-     * @since 1.3.0
+     * @since 1.6.0
      */
-    public function testViewableByFilterCastsStringToInt(): void
+    public function testInviteeUserIdFilterInjectsTwoParams(): void
     {
+        $capturedSql    = null;
         $capturedParams = null;
 
+        $this->db->expects($this->exactly(2))
+            ->method('fetchAll')
+            ->willReturnCallback(
+                function (string $sql, array $params) use (&$capturedSql, &$capturedParams) {
+                    if (strpos($sql, 'fa_cal_invitees') !== false) {
+                        $capturedSql    = $sql;
+                        $capturedParams = $params;
+                    }
+                    return [];
+                }
+            );
+
+        $this->service->getEntriesForDateRange(
+            new DateTime('2026-05-01'),
+            new DateTime('2026-05-31'),
+            ['invitee_user_id' => 3]
+        );
+
+        $this->assertNotNull($capturedSql);
+
+        // Direct user match
+        $this->assertStringContainsString("contact_type = 'user'", $capturedSql);
+        $this->assertStringContainsString("i.contact_id = ?", $capturedSql);
+        // Person-registry fallback for other contact types
+        $this->assertStringContainsString('crm_contacts ic', $capturedSql);
+        $this->assertStringContainsString('crm_contacts uc', $capturedSql);
+        $this->assertStringContainsString("uc.type = 'user'", $capturedSql);
+
+        // 6 date params + 2 invitee params (fa_user contact_id, entity_id)
+        $this->assertCount(8, $capturedParams);
+        $this->assertSame('3', $capturedParams[6]); // user i.contact_id (string)
+        $this->assertSame('3', $capturedParams[7]); // uc.entity_id (string)
+    }
+
+    /**
+     * When invitee_user_id is empty, no separate invitee query is run.
+     *
+     * @since 1.6.0
+     */
+    public function testInviteeUserIdFilterSkippedWhenEmpty(): void
+    {
+        $callCount = 0;
+
         $this->db->method('fetchAll')
-            ->willReturnCallback(function (string $sql, array $params) use (&$capturedParams) {
-                $capturedParams = $params;
+            ->willReturnCallback(function () use (&$callCount) {
+                $callCount++;
                 return [];
             });
 
         $this->service->getEntriesForDateRange(
             new DateTime('2026-05-01'),
             new DateTime('2026-05-31'),
-            ['viewable_by' => '5']
+            ['invitee_user_id' => 0]
         );
 
-        $this->assertCount(8, $capturedParams);
-        $this->assertSame(5,   $capturedParams[6]); // assigned_to (int)
-        $this->assertSame('5', $capturedParams[7]); // uc.entity_id (string)
+        // Only one query (the main entries query, no invitee merge)
+        $this->assertSame(1, $callCount);
+    }
+
+    // =========================================================================
+    // updateIndividualStatus — v1.3.0
+    // =========================================================================
+
+    /**
+     * updateIndividualStatus() fetches the invitee row, updates it, and returns
+     * the entity with the new individual_status value.
+     *
+     * @since 1.3.0
+     */
+    public function testUpdateIndividualStatusReturnsUpdatedInvitee(): void
+    {
+        $row = $this->makeInviteeRow(['individual_status' => null]);
+
+        $this->db->method('fetchAssoc')->willReturn($row);
+        $this->db->expects($this->once())
+            ->method('executeUpdate')
+            ->with(
+                $this->stringContains('individual_status'),
+                $this->anything()
+            )
+            ->willReturn(1);
+
+        $invitee = $this->service->updateIndividualStatus(1, CalendarInvitee::INDIVIDUAL_STATUS_ATTENDED);
+
+        $this->assertInstanceOf(CalendarInvitee::class, $invitee);
+        $this->assertSame(CalendarInvitee::INDIVIDUAL_STATUS_ATTENDED, $invitee->getIndividualStatus());
+    }
+
+    /**
+     * updateIndividualStatus() throws CalendarException when the invitee row is not found.
+     *
+     * @since 1.3.0
+     */
+    public function testUpdateIndividualStatusThrowsWhenInviteeMissing(): void
+    {
+        $this->db->method('fetchAssoc')->willReturn(null);
+        $this->expectException(CalendarException::class);
+        $this->service->updateIndividualStatus(999, CalendarInvitee::INDIVIDUAL_STATUS_ATTENDED);
+    }
+
+    /**
+     * updateIndividualStatus() UPDATE SQL must include individual_status_updated_at = NOW().
+     *
+     * @since 1.3.0
+     */
+    public function testUpdateIndividualStatusSqlIncludesUpdatedAt(): void
+    {
+        $this->db->method('fetchAssoc')->willReturn($this->makeInviteeRow());
+
+        $capturedSql = null;
+        $this->db->expects($this->once())
+            ->method('executeUpdate')
+            ->willReturnCallback(function (string $sql, array $params) use (&$capturedSql) {
+                $capturedSql = $sql;
+                return 1;
+            });
+
+        $this->service->updateIndividualStatus(1, CalendarInvitee::INDIVIDUAL_STATUS_PLANNED);
+
+        $this->assertStringContainsString('individual_status_updated_at', $capturedSql);
+    }
+
+    // =========================================================================
+    // saveEntry / createEntry — v1.3.0 new fields persisted
+    // =========================================================================
+
+    /**
+     * createEntry() INSERT SQL must include direction, meeting_number,
+     * and meeting_passcode columns.
+     *
+     * @since 1.3.0
+     */
+    public function testCreateEntryPersistsV130Fields(): void
+    {
+        $capturedSql = null;
+
+        $this->db->method('fetchAssoc')
+            ->willReturnCallback(function (string $sql) {
+                if (strpos($sql, 'MAX') !== false) {
+                    return ['next_id' => '1'];
+                }
+                return null; // INSERT path
+            });
+
+        $this->db->expects($this->once())
+            ->method('executeUpdate')
+            ->willReturnCallback(function (string $sql, array $params) use (&$capturedSql) {
+                $capturedSql = $sql;
+                return 1;
+            });
+
+        $this->service->createEntry([
+            'title'            => 'Bridge Call',
+            'source_type'      => 'conference_call',
+            'start_date'       => '2026-06-01 10:00:00',
+            'end_date'         => '2026-06-01 11:00:00',
+            'direction'        => 'outbound',
+            'meeting_number'   => '800-555-0100',
+            'meeting_passcode' => 'pass99',
+        ]);
+
+        $this->assertStringContainsString('direction',         $capturedSql);
+        $this->assertStringContainsString('meeting_number',    $capturedSql);
+        $this->assertStringContainsString('meeting_passcode',  $capturedSql);
+    }
+
+    // =========================================================================
+    // saveEntry / createEntry — v1.4.0 new fields persisted
+    // =========================================================================
+
+    /**
+     * createEntry() INSERT SQL must include all eight v1.4.0 columns.
+     *
+     * @since 1.4.0
+     */
+    public function testCreateEntryPersistsV140Fields(): void
+    {
+        $capturedSql = null;
+
+        $this->db->method('fetchAssoc')
+            ->willReturnCallback(function (string $sql) {
+                if (strpos($sql, 'MAX') !== false) {
+                    return ['next_id' => '1'];
+                }
+                return null; // INSERT path
+            });
+
+        $this->db->expects($this->once())
+            ->method('executeUpdate')
+            ->willReturnCallback(function (string $sql, array $params) use (&$capturedSql) {
+                $capturedSql = $sql;
+                return 1;
+            });
+
+        $this->service->createEntry([
+            'title'             => 'Billable Meeting',
+            'source_type'       => 'meeting',
+            'start_date'        => '2026-09-01 10:00:00',
+            'end_date'          => '2026-09-01 11:00:00',
+            'is_scheduled'      => true,
+            'parent_entry_id'   => 5,
+            'guest_policy'      => 'invitees_only',
+            'is_billable'       => true,
+            'billable_rate'     => 125.00,
+            'billable_currency' => 'CAD',
+            'auto_invoice'      => true,
+            'sales_order_id'    => null,
+        ]);
+
+        $this->assertStringContainsString('is_scheduled',      $capturedSql);
+        $this->assertStringContainsString('parent_entry_id',   $capturedSql);
+        $this->assertStringContainsString('guest_policy',      $capturedSql);
+        $this->assertStringContainsString('is_billable',       $capturedSql);
+        $this->assertStringContainsString('billable_rate',     $capturedSql);
+        $this->assertStringContainsString('billable_currency', $capturedSql);
+        $this->assertStringContainsString('auto_invoice',      $capturedSql);
+        $this->assertStringContainsString('sales_order_id',    $capturedSql);
+    }
+
+    // =========================================================================
+    // addDependency — v1.4.0
+    // =========================================================================
+
+    /**
+     * addDependency() inserts a row and returns a CalendarDependency with the
+     * auto-assigned id.
+     *
+     * @since 1.4.0
+     */
+    public function testAddDependencyInsertsRowAndReturnsEntity(): void
+    {
+        $capturedSql = null;
+
+        $this->db->expects($this->once())
+            ->method('executeUpdate')
+            ->willReturnCallback(function (string $sql, array $params) use (&$capturedSql) {
+                $capturedSql = $sql;
+                return 1;
+            });
+
+        $this->db->expects($this->once())
+            ->method('lastInsertId')
+            ->willReturn('42');
+
+        $dep = $this->service->addDependency(
+            10,
+            20,
+            \Ksfraser\Calendar\Entity\CalendarDependency::DEPENDENCY_TYPE_FINISH_TO_START
+        );
+
+        $this->assertInstanceOf(\Ksfraser\Calendar\Entity\CalendarDependency::class, $dep);
+        $this->assertSame(42,  $dep->getId());
+        $this->assertSame(10,  $dep->getEntryId());
+        $this->assertSame(20,  $dep->getDependsOnEntryId());
+        $this->assertSame(
+            \Ksfraser\Calendar\Entity\CalendarDependency::DEPENDENCY_TYPE_FINISH_TO_START,
+            $dep->getDependencyType()
+        );
+
+        $this->assertNotNull($capturedSql);
+        $this->assertStringContainsString('fa_cal_dependencies', $capturedSql);
+    }
+
+    // =========================================================================
+    // removeDependency — v1.4.0
+    // =========================================================================
+
+    /**
+     * removeDependency() soft-deletes the row (sets inactive = 1).
+     *
+     * @since 1.4.0
+     */
+    public function testRemoveDependencySoftDeletes(): void
+    {
+        $this->db->expects($this->once())
+            ->method('executeUpdate')
+            ->with($this->stringContains('inactive = 1'), $this->anything())
+            ->willReturn(1);
+
+        $this->service->removeDependency(42);
+    }
+
+    /**
+     * removeDependency() throws CalendarException when no row is affected.
+     *
+     * @since 1.4.0
+     */
+    public function testRemoveDependencyThrowsWhenNotFound(): void
+    {
+        $this->db->method('executeUpdate')->willReturn(0);
+        $this->expectException(\Ksfraser\Calendar\Exception\CalendarException::class);
+        $this->service->removeDependency(999);
+    }
+
+    // =========================================================================
+    // getDependenciesForEntry — v1.4.0
+    // =========================================================================
+
+    /**
+     * getDependenciesForEntry() returns active dependencies where entry_id matches.
+     *
+     * @since 1.4.0
+     */
+    public function testGetDependenciesForEntryReturnsMappedEntities(): void
+    {
+        $this->db->method('fetchAll')
+            ->willReturn([
+                [
+                    'id'                  => '1',
+                    'entry_id'            => '10',
+                    'depends_on_entry_id' => '20',
+                    'dependency_type'     => 'finish_to_start',
+                    'inactive'            => '0',
+                    'created_at'          => '2026-01-01 08:00:00',
+                ],
+            ]);
+
+        $results = $this->service->getDependenciesForEntry(10);
+
+        $this->assertCount(1, $results);
+        $this->assertInstanceOf(\Ksfraser\Calendar\Entity\CalendarDependency::class, $results[0]);
+        $this->assertSame(10, $results[0]->getEntryId());
+        $this->assertSame(20, $results[0]->getDependsOnEntryId());
+    }
+
+    /**
+     * getDependenciesForEntry() returns empty array when there are none.
+     *
+     * @since 1.4.0
+     */
+    public function testGetDependenciesForEntryReturnsEmptyArray(): void
+    {
+        $this->db->method('fetchAll')->willReturn([]);
+
+        $results = $this->service->getDependenciesForEntry(99);
+
+        $this->assertSame([], $results);
+    }
+
+    // =========================================================================
+    // getDependentsForEntry — v1.4.0
+    // =========================================================================
+
+    /**
+     * getDependentsForEntry() returns rows where depends_on_entry_id matches.
+     *
+     * @since 1.4.0
+     */
+    public function testGetDependentsForEntryReturnsMappedEntities(): void
+    {
+        $this->db->method('fetchAll')
+            ->willReturn([
+                [
+                    'id'                  => '5',
+                    'entry_id'            => '30',
+                    'depends_on_entry_id' => '10',
+                    'dependency_type'     => 'finish_to_start',
+                    'inactive'            => '0',
+                    'created_at'          => '2026-01-02 08:00:00',
+                ],
+            ]);
+
+        $results = $this->service->getDependentsForEntry(10);
+
+        $this->assertCount(1, $results);
+        $this->assertInstanceOf(\Ksfraser\Calendar\Entity\CalendarDependency::class, $results[0]);
+        $this->assertSame(30, $results[0]->getEntryId());
+        $this->assertSame(10, $results[0]->getDependsOnEntryId());
+    }
+
+    /**
+     * getDependentsForEntry() SQL must filter on depends_on_entry_id, not entry_id.
+     *
+     * @since 1.4.0
+     */
+    public function testGetDependentsForEntryQueriesByDependsOnEntryId(): void
+    {
+        $capturedSql = null;
+
+        $this->db->method('fetchAll')
+            ->willReturnCallback(function (string $sql, array $params) use (&$capturedSql) {
+                $capturedSql = $sql;
+                return [];
+            });
+
+        $this->service->getDependentsForEntry(7);
+
+        $this->assertStringContainsString('depends_on_entry_id', $capturedSql);
+    }
+
+    // =========================================================================
+    // getChildEntries — v1.4.0
+    // =========================================================================
+
+    /**
+     * getChildEntries() returns CalendarEntry objects where parent_entry_id matches.
+     *
+     * @since 1.4.0
+     */
+    public function testGetChildEntriesReturnsMappedEntries(): void
+    {
+        $childRow = $this->makeEntryRow(['id' => '50', 'parent_entry_id' => '10']);
+
+        $this->db->method('fetchAll')
+            ->willReturn([$childRow]);
+
+        $results = $this->service->getChildEntries(10);
+
+        $this->assertCount(1, $results);
+        $this->assertInstanceOf(\Ksfraser\Calendar\Entity\CalendarEntry::class, $results[0]);
+    }
+
+    /**
+     * getChildEntries() returns empty array when no children exist.
+     *
+     * @since 1.4.0
+     */
+    public function testGetChildEntriesReturnsEmptyWhenNone(): void
+    {
+        $this->db->method('fetchAll')->willReturn([]);
+
+        $results = $this->service->getChildEntries(99);
+
+        $this->assertSame([], $results);
+    }
+
+    /**
+     * getChildEntries() SQL must filter on parent_entry_id and inactive = 0.
+     *
+     * @since 1.4.0
+     */
+    public function testGetChildEntriesSqlFiltersOnParentEntryId(): void
+    {
+        $capturedSql = null;
+
+        $this->db->method('fetchAll')
+            ->willReturnCallback(function (string $sql, array $params) use (&$capturedSql) {
+                $capturedSql = $sql;
+                return [];
+            });
+
+        $this->service->getChildEntries(5);
+
+        $this->assertStringContainsString('parent_entry_id', $capturedSql);
+        $this->assertStringContainsString('inactive',        $capturedSql);
     }
 }
