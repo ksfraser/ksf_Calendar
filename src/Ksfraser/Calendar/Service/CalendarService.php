@@ -1231,6 +1231,61 @@ class CalendarService
             $this->logger->debug('Person registry search skipped', ['reason' => $e->getMessage()]);
         }
 
+        // Fallback: FA users table (when crm person registry not installed).
+        // Respects contactTypes filter: only query if 'user' is allowed.
+        if (empty($results) || (empty($contactTypes) || in_array(CalendarInvitee::TYPE_FA_USER, $contactTypes))) {
+            try {
+                $userRows = $this->db->fetchAll(
+                    "SELECT id, real_name AS name, email"
+                    . " FROM users"
+                    . " WHERE inactive = 0"
+                    . " AND (real_name LIKE ? OR email LIKE ?)"
+                    . " LIMIT ?",
+                    [$like, $like, $limit]
+                );
+
+                foreach ($userRows as $row) {
+                    $results[] = [
+                        'contact_type' => CalendarInvitee::TYPE_FA_USER,
+                        'contact_id'   => (string) ($row['id'] ?? ''),
+                        'name'         => (string) ($row['name'] ?? ''),
+                        'email'        => (string) ($row['email'] ?? ''),
+                        'phone'        => '',
+                        'type_label'   => 'FA User',
+                    ];
+                }
+            } catch (\Exception $e) {
+                $this->logger->debug('FA users fallback search skipped', ['reason' => $e->getMessage()]);
+            }
+        }
+
+        // CRM contacts fallback (optional; silently skipped if module not installed).
+        if (empty($results) || (empty($contactTypes) || in_array(CalendarInvitee::TYPE_CRM_CONTACT, $contactTypes))) {
+            try {
+                $crmRows = $this->db->fetchAll(
+                    "SELECT id, CONCAT(first_name, ' ', last_name) AS name, email, phone"
+                    . " FROM fa_crm_contacts"
+                    . " WHERE inactive = 0"
+                    . " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?)"
+                    . " LIMIT ?",
+                    [$like, $like, $like, $like, $limit]
+                );
+
+                foreach ($crmRows as $row) {
+                    $results[] = [
+                        'contact_type' => CalendarInvitee::TYPE_CRM_CONTACT,
+                        'contact_id'   => (string) ($row['id'] ?? ''),
+                        'name'         => (string) ($row['name'] ?? ''),
+                        'email'        => (string) ($row['email'] ?? ''),
+                        'phone'        => (string) ($row['phone'] ?? ''),
+                        'type_label'   => 'CRM Contact',
+                    ];
+                }
+            } catch (\Exception $e) {
+                $this->logger->debug('CRM contacts fallback search skipped', ['reason' => $e->getMessage()]);
+            }
+        }
+
         // Resources (optional; silently skipped if module not installed).
         try {
             $resourceRows = $this->db->fetchAll(

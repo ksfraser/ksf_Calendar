@@ -178,10 +178,12 @@ class CalendarServiceTest extends TestCase
 
     public function testSearchInviteesSkipsRegistryWhenTableMissing(): void
     {
-        // crm_persons throws; resources succeed
+        // crm_persons, users, fa_crm_contacts all throw; resources succeed
         $this->db->method('fetchAll')
             ->willReturnCallback(function (string $sql) {
-                if (strpos($sql, 'crm_persons') !== false) {
+                if (strpos($sql, 'crm_persons') !== false
+                    || preg_match('/\busers\b/', $sql)
+                    || strpos($sql, 'fa_crm_contacts') !== false) {
                     throw new \RuntimeException('Table not found');
                 }
                 // Resources succeed
