@@ -244,6 +244,144 @@ class CalendarInviteeTest extends TestCase
     }
 
     // ---------------------------------------------------------------
+    // 1.3.0 — individual_status
+    // ---------------------------------------------------------------
+
+    /**
+     * @since 1.3.0
+     */
+    public function testIndividualStatusConstants(): void
+    {
+        $this->assertSame('planned',      CalendarInvitee::INDIVIDUAL_STATUS_PLANNED);
+        $this->assertSame('attended',     CalendarInvitee::INDIVIDUAL_STATUS_ATTENDED);
+        $this->assertSame('not_attended', CalendarInvitee::INDIVIDUAL_STATUS_NOT_ATTENDED);
+        $this->assertSame('declined',     CalendarInvitee::INDIVIDUAL_STATUS_DECLINED);
+    }
+
+    /**
+     * individual_status defaults to null on construction.
+     *
+     * @since 1.3.0
+     */
+    public function testIndividualStatusDefaultsToNull(): void
+    {
+        $invitee = $this->makeInvitee();
+        $this->assertNull($invitee->getIndividualStatus());
+        $this->assertNull($invitee->getIndividualStatusUpdatedAt());
+    }
+
+    /**
+     * setIndividualStatus returns $this (fluent interface).
+     *
+     * @since 1.3.0
+     */
+    public function testSetIndividualStatusReturnsSelf(): void
+    {
+        $invitee = $this->makeInvitee();
+        $result  = $invitee->setIndividualStatus(CalendarInvitee::INDIVIDUAL_STATUS_ATTENDED);
+
+        $this->assertSame($invitee, $result);
+        $this->assertSame(CalendarInvitee::INDIVIDUAL_STATUS_ATTENDED, $invitee->getIndividualStatus());
+    }
+
+    /**
+     * Setting individual_status stamps individual_status_updated_at.
+     *
+     * @since 1.3.0
+     */
+    public function testSetIndividualStatusStampsUpdatedAt(): void
+    {
+        $invitee = $this->makeInvitee();
+        $before  = new \DateTime();
+        $invitee->setIndividualStatus(CalendarInvitee::INDIVIDUAL_STATUS_PLANNED);
+
+        $this->assertNotNull($invitee->getIndividualStatusUpdatedAt());
+        $this->assertGreaterThanOrEqual($before, $invitee->getIndividualStatusUpdatedAt());
+    }
+
+    /**
+     * Setting individual_status to null clears the timestamp too.
+     *
+     * @since 1.3.0
+     */
+    public function testSetIndividualStatusNullClearsTimestamp(): void
+    {
+        $invitee = $this->makeInvitee();
+        $invitee->setIndividualStatus(CalendarInvitee::INDIVIDUAL_STATUS_ATTENDED);
+        $invitee->setIndividualStatus(null);
+
+        $this->assertNull($invitee->getIndividualStatus());
+        $this->assertNull($invitee->getIndividualStatusUpdatedAt());
+    }
+
+    /**
+     * toArray() must include individual_status and individual_status_updated_at.
+     *
+     * @since 1.3.0
+     */
+    public function testToArrayIncludesIndividualStatus(): void
+    {
+        $invitee = $this->makeInvitee();
+        $invitee->setIndividualStatus(CalendarInvitee::INDIVIDUAL_STATUS_NOT_ATTENDED);
+
+        $arr = $invitee->toArray();
+
+        $this->assertArrayHasKey('individual_status', $arr);
+        $this->assertArrayHasKey('individual_status_updated_at', $arr);
+        $this->assertSame(CalendarInvitee::INDIVIDUAL_STATUS_NOT_ATTENDED, $arr['individual_status']);
+        $this->assertNotNull($arr['individual_status_updated_at']);
+    }
+
+    /**
+     * toArray() individual_status_updated_at is null when status is null.
+     *
+     * @since 1.3.0
+     */
+    public function testToArrayIndividualStatusNullWhenNotSet(): void
+    {
+        $arr = $this->makeInvitee()->toArray();
+
+        $this->assertNull($arr['individual_status']);
+        $this->assertNull($arr['individual_status_updated_at']);
+    }
+
+    /**
+     * fromArray() round-trip preserves individual_status.
+     *
+     * @since 1.3.0
+     */
+    public function testFromArrayRestoresIndividualStatus(): void
+    {
+        $original = $this->makeInvitee();
+        $original->setIndividualStatus(CalendarInvitee::INDIVIDUAL_STATUS_DECLINED);
+
+        $restored = CalendarInvitee::fromArray($original->toArray());
+
+        $this->assertSame(
+            CalendarInvitee::INDIVIDUAL_STATUS_DECLINED,
+            $restored->getIndividualStatus()
+        );
+        $this->assertNotNull($restored->getIndividualStatusUpdatedAt());
+    }
+
+    /**
+     * fromArray() with no individual_status key leaves it null.
+     *
+     * @since 1.3.0
+     */
+    public function testFromArrayMissingIndividualStatusIsNull(): void
+    {
+        $invitee = CalendarInvitee::fromArray([
+            'entry_id'     => 1,
+            'contact_type' => CalendarInvitee::TYPE_FA_USER,
+            'name'         => 'No Status',
+            'email'        => 'nostatus@example.com',
+        ]);
+
+        $this->assertNull($invitee->getIndividualStatus());
+    }
+
+    // ---------------------------------------------------------------
     // Helper
     // ---------------------------------------------------------------
 

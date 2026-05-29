@@ -42,6 +42,14 @@ class CalendarInvitee
     public const RSVP_DECLINED  = 'declined';
     public const RSVP_TENTATIVE = 'tentative';
 
+    // ---------------------------------------------------------------
+    // individual_status constants  (post-event attendance record)
+    // ---------------------------------------------------------------
+    public const INDIVIDUAL_STATUS_PLANNED      = 'planned';
+    public const INDIVIDUAL_STATUS_ATTENDED     = 'attended';
+    public const INDIVIDUAL_STATUS_NOT_ATTENDED = 'not_attended';
+    public const INDIVIDUAL_STATUS_DECLINED     = 'declined';
+
     /** @var int|null DB primary key; null before first save. */
     private $id;
 
@@ -105,6 +113,31 @@ class CalendarInvitee
     private $inactive;
 
     /**
+     * Post-event attendance record.
+     * One of the INDIVIDUAL_STATUS_* constants, or null if not yet set.
+     *
+     * Distinct from rsvp_status (pre-event intent):
+     *   rsvp_status  = did the person say they would come?
+     *   individual_status = did they actually attend?
+     *
+     * Business rules (enforced in FA_Cal_Module, not here):
+     *   - Only the invitee themselves can set their own status to 'declined'.
+     *   - Only the entry owner can set 'attended' / 'not_attended'.
+     *
+     * @var string|null
+     * @since 1.3.0
+     */
+    private $individualStatus;
+
+    /**
+     * Timestamp when individual_status was last changed.
+     *
+     * @var DateTime|null
+     * @since 1.3.0
+     */
+    private $individualStatusUpdatedAt;
+
+    /**
      * @param int         $entryId     Parent calendar entry id
      * @param string      $contactType One of the TYPE_* constants
      * @param string      $name        Display name
@@ -135,6 +168,8 @@ class CalendarInvitee
         $this->invitedAt   = null;
         $this->respondedAt = null;
         $this->inactive    = false;
+        $this->individualStatus          = null;
+        $this->individualStatusUpdatedAt = null;
     }
 
     // ---------------------------------------------------------------
@@ -340,6 +375,44 @@ class CalendarInvitee
         return $this;
     }
 
+    /**
+     * Get the post-event individual attendance status.
+     *
+     * @return string|null  One of the INDIVIDUAL_STATUS_* constants, or null if not set.
+     * @since 1.3.0
+     */
+    public function getIndividualStatus(): ?string
+    {
+        return $this->individualStatus;
+    }
+
+    /**
+     * Set the post-event individual attendance status and stamp the updated-at timestamp.
+     *
+     * Business rules are enforced by FA_Cal_Module::update_individual_status(), not here.
+     *
+     * @param string|null $status One of the INDIVIDUAL_STATUS_* constants, or null to clear.
+     * @return self
+     * @since 1.3.0
+     */
+    public function setIndividualStatus(?string $status): self
+    {
+        $this->individualStatus          = $status;
+        $this->individualStatusUpdatedAt = ($status !== null) ? new DateTime() : null;
+        return $this;
+    }
+
+    /**
+     * Get when individual_status was last changed.
+     *
+     * @return DateTime|null
+     * @since 1.3.0
+     */
+    public function getIndividualStatusUpdatedAt(): ?DateTime
+    {
+        return $this->individualStatusUpdatedAt;
+    }
+
     // ---------------------------------------------------------------
     // Serialisation helpers
     // ---------------------------------------------------------------
@@ -366,6 +439,9 @@ class CalendarInvitee
             'invited_at'   => ($this->invitedAt   !== null ? $this->invitedAt->format('Y-m-d H:i:s')   : null),
             'responded_at' => ($this->respondedAt !== null ? $this->respondedAt->format('Y-m-d H:i:s') : null),
             'inactive'     => $this->inactive,
+            'individual_status'            => $this->individualStatus,
+            'individual_status_updated_at' => ($this->individualStatusUpdatedAt !== null
+                ? $this->individualStatusUpdatedAt->format('Y-m-d H:i:s') : null),
         ];
     }
 
@@ -398,6 +474,12 @@ class CalendarInvitee
         }
         if (!empty($data['responded_at'])) {
             $invitee->respondedAt = new DateTime($data['responded_at']);
+        }
+        if (!empty($data['individual_status'])) {
+            $invitee->individualStatus = (string) $data['individual_status'];
+        }
+        if (!empty($data['individual_status_updated_at'])) {
+            $invitee->individualStatusUpdatedAt = new DateTime($data['individual_status_updated_at']);
         }
 
         return $invitee;
