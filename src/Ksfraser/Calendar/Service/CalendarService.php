@@ -404,9 +404,9 @@ class CalendarService
                   .     "SELECT entry_id FROM " . self::TABLE_INVITEES . " i"
                   .     " WHERE i.inactive = 0"
                   .     " AND ("
-                  .         "(i.contact_type = 'user' AND i.contact_id = ?)"
+                  .         "(i.contact_type = 'fa_user' AND i.contact_id = ?)"
                   .         " OR"
-                  .         "(i.contact_type != 'user' AND EXISTS ("
+                  .         "(i.contact_type != 'fa_user' AND EXISTS ("
                   .             "SELECT 1 FROM crm_contacts ic"
                   .             " JOIN crm_contacts uc"
                   .                " ON uc.person_id = ic.person_id"
@@ -454,9 +454,9 @@ class CalendarService
                 .     " WHERE i.rsvp_status = 'accepted'"
                 .     " AND i.inactive = 0"
                 .     " AND ("
-                .         "(i.contact_type = 'user' AND i.contact_id = ?)"
-                .         " OR"
-                .         "(i.contact_type != 'user' AND EXISTS ("
+.         "(i.contact_type = 'fa_user' AND i.contact_id = ?)"
+                  .         " OR"
+                  .         "(i.contact_type != 'fa_user' AND EXISTS ("
                 .             "SELECT 1 FROM crm_contacts ic"
                 .             " JOIN crm_contacts uc"
                 .                " ON uc.person_id = ic.person_id"
@@ -1142,10 +1142,103 @@ class CalendarService
 
         return array_map(function (array $row): array {
             return [
-                'start' => $row['start_date'],
-                'end'   => $row['end_date'] ?? $row['start_date'],
+                'start' => str_replace(' ', 'T', $row['start_date']),
+                'end'   => str_replace(' ', 'T', $row['end_date'] ?? $row['start_date']),
             ];
         }, $rows);
+    }
+
+    /**
+     * Return busy time slots for multiple contacts/resources in a single query.
+     *
+     * Accepts an array of contact descriptors, each with 'contact_type' and
+     * 'contact_id' keys.  Runs one SQL query with OR conditions and returns
+     * results grouped by a composite key "{$type}:{$id}" so the caller can
+     * map them back to the original contacts.
+     *
+     * Example return:
+     *   [
+     *     'fa_user:3'  => [['start' => '...', 'end' => '...'], ...],
+     *     'resource:7' => [],
+     *   ]
+     *
+     * @param array<int, array{contact_type: string, contact_id: string}> $contacts
+     * @param DateTime $start  Range start (inclusive)
+     * @param DateTime $end    Range end (inclusive)
+     * @return array<string, array<int, array{start: string, end: string}>>
+     * @since 1.7.0
+     */
+    public function getFreeBusyBatch(
+        array $contacts,
+        \DateTime $start,
+        \DateTime $end
+    ): array {
+        if (empty($contacts)) {
+            return [];
+        }
+
+        // Build OR conditions and parameter list.
+        $conditions = [];
+        $params     = [];
+        foreach ($contacts as $i => $c) {
+            $cType = (string) ($c['contact_type'] ?? '');
+            $cId   = (string) ($c['contact_id']   ?? '');
+            if ($cType === '' || $cId === '') {
+                continue;
+            }
+            $conditions[] = "(i.contact_type = ? AND i.contact_id = ?)";
+            $params[] = $cType;
+            $params[] = $cId;
+        }
+
+        if (empty($conditions)) {
+            return [];
+        }
+
+        $where = implode(' OR ', $conditions);
+
+        $sql = "SELECT i.contact_type, i.contact_id, e.start_date, e.end_date
+                FROM " . self::TABLE_INVITEES . " i
+                JOIN " . self::TABLE_ENTRIES . " e ON e.id = i.entry_id
+                WHERE ($where)
+                  AND i.rsvp_status != ?
+                  AND i.inactive = 0
+                  AND e.inactive = 0
+                  AND e.start_date < ?
+                  AND (e.end_date > ? OR e.end_date IS NULL)
+                ORDER BY i.contact_type, i.contact_id, e.start_date ASC";
+
+        $params[] = CalendarInvitee::RSVP_DECLINED;
+        $params[] = $end->format('Y-m-d H:i:s');
+        $params[] = $start->format('Y-m-d H:i:s');
+
+        $rows = $this->db->fetchAll($sql, $params);
+
+        // Group by composite key (only for valid contacts that were queried).
+        $grouped = [];
+        foreach ($contacts as $c) {
+            $cType = (string) ($c['contact_type'] ?? '');
+            $cId   = (string) ($c['contact_id']   ?? '');
+            if ($cType === '' || $cId === '') {
+                continue;
+            }
+            $key = $cType . ':' . $cId;
+            $grouped[$key] = [];
+        }
+
+        foreach ($rows as $row) {
+            $key = ((string) ($row['contact_type'] ?? '')) . ':' . ((string) ($row['contact_id'] ?? ''));
+            if (!isset($grouped[$key])) {
+                // Contact wasn't in the requested list (shouldn't happen, but be safe).
+                continue;
+            }
+            $grouped[$key][] = [
+                'start' => str_replace(' ', 'T', $row['start_date']),
+                'end'   => str_replace(' ', 'T', $row['end_date'] ?? $row['start_date']),
+            ];
+        }
+
+        return $grouped;
     }
 
     /**
@@ -1207,7 +1300,7 @@ class CalendarService
                 . "     cp.phone,"
                 . "     cat.name    AS type_label"
                 . " FROM crm_persons cp"
-                . " JOIN crm_contacts cc  ON cc.person_id = cp.id AND cc.inactive = 0"
+                . " JOIN crm_contacts cc  ON cc.person_id = cp.id"
                 . " JOIN crm_categories cat ON cat.type = cc.type AND cat.action = 'general'"
                 . " WHERE (cp.name LIKE ? OR cp.email LIKE ?)"
                 . "   AND cp.inactive = 0"
@@ -1218,8 +1311,14 @@ class CalendarService
             );
 
             foreach ($personRows as $row) {
+                // Map person-registry contact types to calendar invitee types:
+                //   'user' → 'fa_user' (crm_contacts.type uses 'user', calendar uses 'fa_user')
+                $contactType = (string) ($row['contact_type'] ?? '');
+                if ($contactType === 'user') {
+                    $contactType = CalendarInvitee::TYPE_FA_USER;
+                }
                 $results[] = [
-                    'contact_type' => (string) ($row['contact_type']   ?? ''),
+                    'contact_type' => $contactType,
                     'contact_id'   => (string) ($row['crm_contact_id'] ?? ''),
                     'name'         => (string) ($row['name']           ?? ''),
                     'email'        => (string) ($row['email']          ?? ''),
@@ -1803,9 +1902,14 @@ class CalendarService
                 $data['is_organizer'] ? 1 : 0,
                 $data['is_resource']  ? 1 : 0,
                 $data['invited_at'],
-                $data['individual_status'],
+                $data['individual_status'] ?? '',
             ]
         );
+
+        $realId = $this->db->lastInsertId();
+        if ($realId) {
+            $invitee->setId((int) $realId);
+        }
     }
 
     /**
