@@ -292,6 +292,49 @@ class CalendarService
         $this->logger->info('Calendar entry deleted', ['id' => $id]);
     }
 
+    /**
+     * Clone an existing calendar entry with new dates.
+     *
+     * Copies the entry (except recurrence fields) and all invitees.
+     * The new entry gets fresh created_at/updated_at timestamps.
+     *
+     * @param int         $id        Source entry ID
+     * @param DateTime    $newStart  New start date/time for the clone
+     * @param DateTime    $newEnd    New end date/time for the clone
+     * @return CalendarEntry
+     * @since 1.8.0
+     */
+    public function cloneEntry(int $id, \DateTime $newStart, \DateTime $newEnd): CalendarEntry
+    {
+        $original = $this->getEntry($id);
+        $data = $original->toArray();
+
+        // Remove identity and recurrence fields.
+        unset($data['id']);
+        $data['start_date'] = $newStart->format('Y-m-d H:i:s');
+        $data['end_date']   = $newEnd->format('Y-m-d H:i:s');
+        $data['recurrence_rule']  = null;
+        $data['recurrence_id']    = null;
+        $data['recurrence_end_date'] = null;
+        $data['recurrence_count']    = null;
+        $data['parent_entry_id']     = null;
+        $data['source_id'] = 'clone_' . $id;
+
+        $entry = CalendarEntry::fromArray($data);
+        $this->saveEntry($entry);
+
+        // Clone invitees (skip inactive).
+        $invitees = $this->loadInvitees($id);
+        foreach ($invitees as $inv) {
+            $invData = $inv->toArray();
+            unset($invData['id']);
+            $invData['entry_id'] = $entry->getId();
+            $this->saveInvitee(CalendarInvitee::fromArray($invData));
+        }
+
+        return $this->getEntry($entry->getId());
+    }
+
     public function getEntriesForDateRange(
         DateTime $start,
         DateTime $end,
@@ -397,16 +440,17 @@ class CalendarService
             //
             // To find entries visible to $userId:
             //   assigned_to = $userId  (direct ownership)
-            //   OR i.contact_type = 'user' AND i.contact_id = $userIdStr
+            //   OR i.contact_type IN ('fa_user', 'user') AND i.contact_id = $userIdStr
+            //   (the 'user' fallback is for pre-v1.5 data before ContactTypeRegistry alignment)
             //   OR other contact types: person-registry JOIN to user hat
             $sql .= " AND (assigned_to = ?"
                   . " OR id IN ("
                   .     "SELECT entry_id FROM " . self::TABLE_INVITEES . " i"
                   .     " WHERE i.inactive = 0"
                   .     " AND ("
-                  .         "(i.contact_type = 'fa_user' AND i.contact_id = ?)"
+                .         "((i.contact_type = '" . CalendarInvitee::TYPE_FA_USER . "' OR i.contact_type = 'user') AND i.contact_id = ?)"
                   .         " OR"
-                  .         "(i.contact_type != 'fa_user' AND EXISTS ("
+                  .         "(i.contact_type NOT IN ('" . CalendarInvitee::TYPE_FA_USER . "', 'user') AND EXISTS ("
                   .             "SELECT 1 FROM crm_contacts ic"
                   .             " JOIN crm_contacts uc"
                   .                " ON uc.person_id = ic.person_id"
@@ -440,6 +484,7 @@ class CalendarService
         //   - user type: the FA numeric user ID (e.g. "1") via TYPE_FA_USER
         //   - crm_contact type: crm_contacts.id (e.g. "42") via TYPE_CRM_CONTACT
         // The subquery handles both via an OR branch.
+        // Backward compat: also match legacy 'user' contact_type (pre-1.5 data).
         if (!empty($filters['invitee_user_id'])) {
             $invStr = (string) $filters['invitee_user_id'];
             $invSql = "SELECT e.* FROM " . self::TABLE_ENTRIES . " e"
@@ -451,21 +496,21 @@ class CalendarService
                 . ")"
                 . " AND e.id IN ("
                 .     "SELECT i.entry_id FROM " . self::TABLE_INVITEES . " i"
-                .     " WHERE i.rsvp_status = 'accepted'"
+                .     " WHERE i.rsvp_status != 'declined'"
                 .     " AND i.inactive = 0"
                 .     " AND ("
-.         "(i.contact_type = 'fa_user' AND i.contact_id = ?)"
+                .         "((i.contact_type = '" . CalendarInvitee::TYPE_FA_USER . "' OR i.contact_type = 'user') AND i.contact_id = ?)"
                   .         " OR"
-                  .         "(i.contact_type != 'fa_user' AND EXISTS ("
-                .             "SELECT 1 FROM crm_contacts ic"
-                .             " JOIN crm_contacts uc"
-                .                " ON uc.person_id = ic.person_id"
-                .               " AND uc.type = 'user'"
-                .               " AND uc.entity_id = ?"
-                .             " WHERE ic.id = i.contact_id"
-                .         "))"
-                .     ")"
-                . ")";
+                  .         "(i.contact_type NOT IN ('" . CalendarInvitee::TYPE_FA_USER . "', 'user') AND EXISTS ("
+                  .             "SELECT 1 FROM crm_contacts ic"
+                  .             " JOIN crm_contacts uc"
+                  .                " ON uc.person_id = ic.person_id"
+                  .               " AND uc.type = 'user'"
+                  .               " AND uc.entity_id = ?"
+                  .             " WHERE ic.id = i.contact_id"
+                  .         "))"
+                  .     ")"
+                  . ")";
             $invParams = [
                 $start->format('Y-m-d'), $end->format('Y-m-d'),
                 $start->format('Y-m-d'), $end->format('Y-m-d'),
@@ -980,6 +1025,9 @@ class CalendarService
         if (isset($data['is_organizer'])) {
             $invitee->setIsOrganizer((bool) $data['is_organizer']);
         }
+        if (isset($data['permission'])) {
+            $invitee->setPermission((string) $data['permission']);
+        }
 
         // Resources auto-accept when available.
         if ($invitee->isResource()) {
@@ -1026,6 +1074,39 @@ class CalendarService
              SET rsvp_status = ?, responded_at = NOW()
              WHERE id = ?",
             [$rsvpStatus, (string) $inviteeId]
+        );
+
+        return $invitee;
+    }
+
+    /**
+     * Update the permission level for an invitee.
+     *
+     * @param int    $inviteeId
+     * @param string $permission One of CalendarInvitee::PERMISSION_VIEW or PERMISSION_EDIT
+     * @return CalendarInvitee
+     * @throws CalendarException
+     * @since 1.8.0
+     */
+    public function updateInviteePermission(int $inviteeId, string $permission): CalendarInvitee
+    {
+        $row = $this->db->fetchAssoc(
+            "SELECT * FROM " . self::TABLE_INVITEES . " WHERE id = ? AND inactive = 0",
+            [(string) $inviteeId]
+        );
+
+        if (!$row) {
+            throw new CalendarException("Invitee $inviteeId not found");
+        }
+
+        $invitee = CalendarInvitee::fromArray($row);
+        $invitee->setPermission($permission);
+
+        $this->db->executeUpdate(
+            "UPDATE " . self::TABLE_INVITEES . "
+             SET permission = ?
+             WHERE id = ?",
+            [$permission, (string) $inviteeId]
         );
 
         return $invitee;
@@ -1149,99 +1230,6 @@ class CalendarService
     }
 
     /**
-     * Return busy time slots for multiple contacts/resources in a single query.
-     *
-     * Accepts an array of contact descriptors, each with 'contact_type' and
-     * 'contact_id' keys.  Runs one SQL query with OR conditions and returns
-     * results grouped by a composite key "{$type}:{$id}" so the caller can
-     * map them back to the original contacts.
-     *
-     * Example return:
-     *   [
-     *     'fa_user:3'  => [['start' => '...', 'end' => '...'], ...],
-     *     'resource:7' => [],
-     *   ]
-     *
-     * @param array<int, array{contact_type: string, contact_id: string}> $contacts
-     * @param DateTime $start  Range start (inclusive)
-     * @param DateTime $end    Range end (inclusive)
-     * @return array<string, array<int, array{start: string, end: string}>>
-     * @since 1.7.0
-     */
-    public function getFreeBusyBatch(
-        array $contacts,
-        \DateTime $start,
-        \DateTime $end
-    ): array {
-        if (empty($contacts)) {
-            return [];
-        }
-
-        // Build OR conditions and parameter list.
-        $conditions = [];
-        $params     = [];
-        foreach ($contacts as $i => $c) {
-            $cType = (string) ($c['contact_type'] ?? '');
-            $cId   = (string) ($c['contact_id']   ?? '');
-            if ($cType === '' || $cId === '') {
-                continue;
-            }
-            $conditions[] = "(i.contact_type = ? AND i.contact_id = ?)";
-            $params[] = $cType;
-            $params[] = $cId;
-        }
-
-        if (empty($conditions)) {
-            return [];
-        }
-
-        $where = implode(' OR ', $conditions);
-
-        $sql = "SELECT i.contact_type, i.contact_id, e.start_date, e.end_date
-                FROM " . self::TABLE_INVITEES . " i
-                JOIN " . self::TABLE_ENTRIES . " e ON e.id = i.entry_id
-                WHERE ($where)
-                  AND i.rsvp_status != ?
-                  AND i.inactive = 0
-                  AND e.inactive = 0
-                  AND e.start_date < ?
-                  AND (e.end_date > ? OR e.end_date IS NULL)
-                ORDER BY i.contact_type, i.contact_id, e.start_date ASC";
-
-        $params[] = CalendarInvitee::RSVP_DECLINED;
-        $params[] = $end->format('Y-m-d H:i:s');
-        $params[] = $start->format('Y-m-d H:i:s');
-
-        $rows = $this->db->fetchAll($sql, $params);
-
-        // Group by composite key (only for valid contacts that were queried).
-        $grouped = [];
-        foreach ($contacts as $c) {
-            $cType = (string) ($c['contact_type'] ?? '');
-            $cId   = (string) ($c['contact_id']   ?? '');
-            if ($cType === '' || $cId === '') {
-                continue;
-            }
-            $key = $cType . ':' . $cId;
-            $grouped[$key] = [];
-        }
-
-        foreach ($rows as $row) {
-            $key = ((string) ($row['contact_type'] ?? '')) . ':' . ((string) ($row['contact_id'] ?? ''));
-            if (!isset($grouped[$key])) {
-                // Contact wasn't in the requested list (shouldn't happen, but be safe).
-                continue;
-            }
-            $grouped[$key][] = [
-                'start' => str_replace(' ', 'T', $row['start_date']),
-                'end'   => str_replace(' ', 'T', $row['end_date'] ?? $row['start_date']),
-            ];
-        }
-
-        return $grouped;
-    }
-
-    /**
      * Search persons by name or email via the FA person registry.
      *
      * Returns one row per "hat" (crm_contacts row) per matching person.
@@ -1311,14 +1299,8 @@ class CalendarService
             );
 
             foreach ($personRows as $row) {
-                // Map person-registry contact types to calendar invitee types:
-                //   'user' → 'fa_user' (crm_contacts.type uses 'user', calendar uses 'fa_user')
-                $contactType = (string) ($row['contact_type'] ?? '');
-                if ($contactType === 'user') {
-                    $contactType = CalendarInvitee::TYPE_FA_USER;
-                }
                 $results[] = [
-                    'contact_type' => $contactType,
+                    'contact_type' => (string) ($row['contact_type']   ?? ''),
                     'contact_id'   => (string) ($row['crm_contact_id'] ?? ''),
                     'name'         => (string) ($row['name']           ?? ''),
                     'email'        => (string) ($row['email']          ?? ''),
@@ -1888,9 +1870,9 @@ class CalendarService
         $this->db->executeUpdate(
             "INSERT INTO " . self::TABLE_INVITEES . "
              (entry_id, contact_type, contact_id, name, email, phone,
-              rsvp_status, is_organizer, is_resource, invited_at,
+              rsvp_status, permission, is_organizer, is_resource, invited_at,
               individual_status, inactive)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
             [
                 $data['entry_id'],
                 $data['contact_type'],
@@ -1899,6 +1881,7 @@ class CalendarService
                 $data['email'],
                 $data['phone'],
                 $data['rsvp_status'],
+                $data['permission'] ?? CalendarInvitee::PERMISSION_VIEW,
                 $data['is_organizer'] ? 1 : 0,
                 $data['is_resource']  ? 1 : 0,
                 $data['invited_at'],

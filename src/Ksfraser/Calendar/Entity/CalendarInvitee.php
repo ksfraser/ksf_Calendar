@@ -29,7 +29,7 @@ class CalendarInvitee
     // ---------------------------------------------------------------
     // contact_type constants
     // ---------------------------------------------------------------
-    public const TYPE_FA_USER     = 'user';
+    public const TYPE_FA_USER     = 'fa_user';
     public const TYPE_CRM_CONTACT = 'crm_contact';
     public const TYPE_RESOURCE    = 'resource';
     public const TYPE_AD_HOC      = 'ad_hoc';
@@ -41,6 +41,12 @@ class CalendarInvitee
     public const RSVP_ACCEPTED  = 'accepted';
     public const RSVP_DECLINED  = 'declined';
     public const RSVP_TENTATIVE = 'tentative';
+
+    // ---------------------------------------------------------------
+    // permission constants
+    // ---------------------------------------------------------------
+    public const PERMISSION_VIEW = 'view';
+    public const PERMISSION_EDIT = 'edit';
 
     // ---------------------------------------------------------------
     // individual_status constants  (post-event attendance record)
@@ -90,6 +96,15 @@ class CalendarInvitee
      * @var string
      */
     private $rsvpStatus;
+
+    /**
+     * Permission level: 'view' or 'edit'.
+     * 'edit' allows the invitee to edit the event (like assigned-to).
+     * Only the assigned-to user can change this.
+     *
+     * @var string
+     */
+    private $permission;
 
     /** @var bool True if this invitee is the meeting/event organiser. */
     private $isOrganizer;
@@ -163,6 +178,7 @@ class CalendarInvitee
         $this->email       = $email;
         $this->phone       = '';
         $this->rsvpStatus  = self::RSVP_PENDING;
+        $this->permission  = self::PERMISSION_VIEW;
         $this->isOrganizer = false;
         $this->isResource  = ($contactType === self::TYPE_RESOURCE);
         $this->invitedAt   = null;
@@ -183,6 +199,19 @@ class CalendarInvitee
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    /**
+     * Set the auto-increment ID (used after DB insert).
+     *
+     * @param int $id
+     * @return self
+     * @since 1.3.0
+     */
+    public function setId(int $id): self
+    {
+        $this->id = $id;
+        return $this;
     }
 
     /**
@@ -246,6 +275,26 @@ class CalendarInvitee
     public function getRsvpStatus(): string
     {
         return $this->rsvpStatus;
+    }
+
+    /**
+     * @return string
+     * @since 1.8.0
+     */
+    public function getPermission(): string
+    {
+        return $this->permission;
+    }
+
+    /**
+     * @param string $permission One of PERMISSION_VIEW or PERMISSION_EDIT
+     * @return self
+     * @since 1.8.0
+     */
+    public function setPermission(string $permission): self
+    {
+        $this->permission = $permission === self::PERMISSION_EDIT ? self::PERMISSION_EDIT : self::PERMISSION_VIEW;
+        return $this;
     }
 
     /**
@@ -434,6 +483,7 @@ class CalendarInvitee
             'email'        => $this->email,
             'phone'        => $this->phone,
             'rsvp_status'  => $this->rsvpStatus,
+            'permission'   => $this->permission,
             'is_organizer' => $this->isOrganizer,
             'is_resource'  => $this->isResource,
             'invited_at'   => ($this->invitedAt   !== null ? $this->invitedAt->format('Y-m-d H:i:s')   : null),
@@ -465,6 +515,7 @@ class CalendarInvitee
 
         $invitee->setPhone((string) ($data['phone'] ?? ''));
         $invitee->rsvpStatus  = (string) ($data['rsvp_status']  ?? self::RSVP_PENDING);
+        $invitee->permission  = (string) ($data['permission']   ?? self::PERMISSION_VIEW);
         $invitee->isOrganizer = (bool)   ($data['is_organizer'] ?? false);
         $invitee->isResource  = (bool)   ($data['is_resource']  ?? false);
         $invitee->inactive    = (bool)   ($data['inactive']     ?? false);
