@@ -85,6 +85,13 @@ class CalendarEntryDTO
     /** @var string|null iCalendar recurrence rule string. */
     private $recurrenceRule;
     /**
+     * Ordinal occurrence number within a recurring series (1-based).
+     * Null for standalone entries and the parent of a recurring series.
+     *
+     * @var int|null
+     */
+    private $recurrenceId;
+    /**
      * Call / conference_call direction: 'inbound' or 'outbound'.
      *
      * @var string|null
@@ -216,6 +223,7 @@ class CalendarEntryDTO
      * @param string|null $billableCurrency @since 1.4.0
      * @param bool        $autoInvoice      @since 1.4.0
      * @param string|null $salesOrderId     @since 1.4.0
+     * @param int|null    $recurrenceId     @since 1.8.0
      *
      * @since 1.0.0
      */
@@ -262,7 +270,8 @@ class CalendarEntryDTO
         $billableRate = null,
         $billableCurrency = null,
         $autoInvoice = false,
-        $salesOrderId = null
+        $salesOrderId = null,
+        $recurrenceId = null
     ) {
         $this->id              = $id;
         $this->source          = $source;
@@ -307,6 +316,7 @@ class CalendarEntryDTO
         $this->billableCurrency = $billableCurrency;
         $this->autoInvoice     = (bool) $autoInvoice;
         $this->salesOrderId    = $salesOrderId;
+        $this->recurrenceId    = ($recurrenceId !== null) ? (int) $recurrenceId : null;
     }
 
     /**
@@ -365,6 +375,7 @@ class CalendarEntryDTO
                 'auto_invoice'     => $this->autoInvoice,
                 'sales_order_id'   => $this->salesOrderId,
                 'recurrence_rule'  => $this->recurrenceRule,
+                'recurrence_id'    => $this->recurrenceId,
             ],
         ];
     }
@@ -421,6 +432,7 @@ class CalendarEntryDTO
             'billable_currency' => $this->billableCurrency,
             'auto_invoice'     => $this->autoInvoice,
             'sales_order_id'   => $this->salesOrderId,
+            'recurrence_id'    => $this->recurrenceId,
         ];
     }
 
@@ -488,7 +500,8 @@ class CalendarEntryDTO
             isset($data['billable_rate'])     ? (float) $data['billable_rate'] : null,
             $data['billable_currency']       ?? null,
             (bool) ($data['auto_invoice']    ?? false),
-            $data['sales_order_id']          ?? null
+            $data['sales_order_id']          ?? null,
+            isset($data['recurrence_id'])    ? (int) $data['recurrence_id'] : null
         );
     }
 
@@ -556,7 +569,8 @@ class CalendarEntryDTO
             $entity->getBillableRate(),
             $entity->getBillableCurrency(),
             $entity->isAutoInvoice(),
-            $entity->getSalesOrderId()
+            $entity->getSalesOrderId(),
+            $entity->getRecurrenceId()
         );
     }
 
