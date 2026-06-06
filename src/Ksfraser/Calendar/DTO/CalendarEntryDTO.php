@@ -321,13 +321,17 @@ class CalendarEntryDTO
      */
     public function toFullCalendarArray(): array
     {
-        $endStr = $this->endDate ?: $this->startDate;
+        $endStr  = $this->endDate ?: $this->startDate;
+        $startTs = $this->startDate ? (int) strtotime($this->startDate) : null;
+        $endTs   = $this->endDate   ? (int) strtotime($this->endDate)   : $startTs;
 
         return [
             'id'         => $this->id,
             'title'      => $this->title,
             'start'      => $this->startDate,
             'end'        => $endStr,
+            'start_ts'   => $startTs,
+            'end_ts'     => $endTs,
             'allDay'     => $this->allDay === 'yes',
             'color'      => $this->color ?: $this->getDefaultColor(),
             'textColor'  => '#ffffff',
@@ -360,6 +364,7 @@ class CalendarEntryDTO
                 'billable_currency' => $this->billableCurrency,
                 'auto_invoice'     => $this->autoInvoice,
                 'sales_order_id'   => $this->salesOrderId,
+                'recurrence_rule'  => $this->recurrenceRule,
             ],
         ];
     }

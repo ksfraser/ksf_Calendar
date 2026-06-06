@@ -172,6 +172,9 @@ class CalendarService
         if (isset($data['recurrence_count'])) {
             $entry->setRecurrenceCount((int) $data['recurrence_count']);
         }
+        if (array_key_exists('recurrence_rule', $data)) {
+            $entry->setRecurrenceRule($data['recurrence_rule'] ?: null);
+        }
 
         $this->applyDefaultDuration($entry);
 
@@ -270,6 +273,9 @@ class CalendarService
         }
         if (array_key_exists('meeting_passcode', $data)) {
             $entry->setMeetingPasscode($data['meeting_passcode']);
+        }
+        if (array_key_exists('recurrence_rule', $data)) {
+            $entry->setRecurrenceRule($data['recurrence_rule'] ?: null);
         }
 
         $this->applyDefaultDuration($entry);
@@ -835,7 +841,7 @@ class CalendarService
                     is_scheduled = ?, parent_entry_id = ?, guest_policy = ?,
                     is_billable = ?, billable_rate = ?, billable_currency = ?,
                      auto_invoice = ?, sales_order_id = ?,
-                     recurrence_end_date = ?, recurrence_count = ?,
+                     recurrence_rule = ?, recurrence_end_date = ?, recurrence_count = ?,
                      updated_at = NOW()
                      WHERE id = ?";
 
@@ -872,6 +878,7 @@ class CalendarService
                 $entry->getBillableCurrency(),
                 $entry->isAutoInvoice() ? 1 : 0,
                 $entry->getSalesOrderId(),
+                $entry->getRecurrenceRule(),
                 $entry->getRecurrenceEndDate() !== null ? $entry->getRecurrenceEndDate()->format('Y-m-d H:i:s') : null,
                 $entry->getRecurrenceCount(),
                 $entry->getId() !== null ? (string) $entry->getId() : null,
@@ -888,7 +895,7 @@ class CalendarService
                     is_scheduled, parent_entry_id, guest_policy,
                     is_billable, billable_rate, billable_currency,
                     auto_invoice, sales_order_id,
-                    recurrence_end_date, recurrence_count,
+                    recurrence_rule, recurrence_end_date, recurrence_count,
                     created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
 
@@ -930,6 +937,7 @@ class CalendarService
                 $entry->getBillableCurrency(),
                 $entry->isAutoInvoice() ? 1 : 0,
                 $entry->getSalesOrderId(),
+                $entry->getRecurrenceRule(),
                 $entry->getRecurrenceEndDate() !== null ? $entry->getRecurrenceEndDate()->format('Y-m-d H:i:s') : null,
                 $entry->getRecurrenceCount(),
             ];
