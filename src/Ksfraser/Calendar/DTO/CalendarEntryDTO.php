@@ -27,6 +27,7 @@ namespace Ksfraser\Calendar\DTO;
 
 use DateTime;
 use Ksfraser\Calendar\Entity\CalendarEntry;
+use Ksfraser\Calendar\Entity\CalendarOccurrence;
 
 class CalendarEntryDTO
 {
@@ -91,6 +92,10 @@ class CalendarEntryDTO
      * @var int|null
      */
     private $recurrenceId;
+    /** @var string|null JSON delta vs parent entry. @since 1.9.0 */
+    private $delta;
+    /** @var bool Flagged for review. @since 1.9.0 */
+    private $needsReview;
     /**
      * Call / conference_call direction: 'inbound' or 'outbound'.
      *
@@ -224,6 +229,8 @@ class CalendarEntryDTO
      * @param bool        $autoInvoice      @since 1.4.0
      * @param string|null $salesOrderId     @since 1.4.0
      * @param int|null    $recurrenceId     @since 1.8.0
+     * @param string|null $delta            @since 1.9.0
+     * @param bool        $needsReview      @since 1.9.0
      *
      * @since 1.0.0
      */
@@ -271,7 +278,9 @@ class CalendarEntryDTO
         $billableCurrency = null,
         $autoInvoice = false,
         $salesOrderId = null,
-        $recurrenceId = null
+        $recurrenceId = null,
+        $delta = null,
+        $needsReview = false
     ) {
         $this->id              = $id;
         $this->source          = $source;
@@ -317,6 +326,8 @@ class CalendarEntryDTO
         $this->autoInvoice     = (bool) $autoInvoice;
         $this->salesOrderId    = $salesOrderId;
         $this->recurrenceId    = ($recurrenceId !== null) ? (int) $recurrenceId : null;
+        $this->delta           = $delta;
+        $this->needsReview     = (bool) $needsReview;
     }
 
     /**
@@ -376,6 +387,8 @@ class CalendarEntryDTO
                 'sales_order_id'   => $this->salesOrderId,
                 'recurrence_rule'  => $this->recurrenceRule,
                 'recurrence_id'    => $this->recurrenceId,
+                'delta'            => $this->delta,
+                'needs_review'     => $this->needsReview,
             ],
         ];
     }
@@ -416,6 +429,8 @@ class CalendarEntryDTO
             'online_url'       => $this->onlineUrl,
             'phone_number'     => $this->phoneNumber,
             'recurrence_rule'  => $this->recurrenceRule,
+            'delta'            => $this->delta,
+            'needs_review'     => $this->needsReview,
             'direction'        => $this->direction,
             'meeting_number'   => $this->meetingNumber,
             'meeting_passcode' => $this->meetingPasscode,
@@ -501,7 +516,9 @@ class CalendarEntryDTO
             $data['billable_currency']       ?? null,
             (bool) ($data['auto_invoice']    ?? false),
             $data['sales_order_id']          ?? null,
-            isset($data['recurrence_id'])    ? (int) $data['recurrence_id'] : null
+            isset($data['recurrence_id'])    ? (int) $data['recurrence_id'] : null,
+            $data['delta']                  ?? null,
+            (bool) ($data['needs_review']   ?? false)
         );
     }
 
@@ -570,8 +587,35 @@ class CalendarEntryDTO
             $entity->getBillableCurrency(),
             $entity->isAutoInvoice(),
             $entity->getSalesOrderId(),
-            $entity->getRecurrenceId()
+            $entity->getRecurrenceId(),
+            $entity->getDelta(),
+            $entity->getNeedsReview()
         );
+    }
+
+    /**
+     * Create a DTO from a parent recurring entry and a specific occurrence.
+     *
+     * @param CalendarEntry     $parent    The recurring parent entry.
+     * @param CalendarOccurrence $occurrence The occurrence instance.
+     * @return self
+     * @since 1.9.0
+     */
+    public static function fromOccurrence(CalendarEntry $parent, CalendarOccurrence $occurrence): self
+    {
+        $dto = self::fromEntity($parent);
+        $allDay  = $parent->getAllDay();
+        $dateFormat = 'Y-m-d';
+        $dtFormat   = 'Y-m-d\TH:i:s';
+        $startFormat = ($allDay === 'yes') ? $dateFormat : $dtFormat;
+        $endFormat   = ($allDay === 'yes') ? $dateFormat : $dtFormat;
+        $dto->id            = $occurrence->getId();
+        $dto->startDate     = $occurrence->getStartDate()->format($startFormat);
+        $dto->endDate       = $occurrence->getEndDate()->format($endFormat);
+        $dto->recurrenceId  = $occurrence->getRecurrenceId();
+        $dto->parentEntryId = $parent->getId();
+        $dto->recurrenceRule = null;
+        return $dto;
     }
 
     /**

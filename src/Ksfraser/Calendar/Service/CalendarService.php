@@ -18,6 +18,7 @@ use Ksfraser\Calendar\Entity\CalendarSource;
 use Ksfraser\Calendar\Entity\CalendarDependency;
 use Ksfraser\Calendar\Entity\CalendarAttachment;
 use Ksfraser\Calendar\Entity\CalendarNotification;
+use Ksfraser\Calendar\Entity\CalendarOccurrence;
 use Ksfraser\Calendar\Contract\DatabaseAdapterInterface;
 use Ksfraser\Calendar\Contract\ProjectServiceInterface;
 use Ksfraser\Calendar\Event\CalendarEntryCreatedEvent;
@@ -35,6 +36,7 @@ class CalendarService
     private const TABLE_DEPENDENCIES  = 'fa_cal_dependencies';
     private const TABLE_ATTACHMENTS   = 'fa_cal_attachments';
     private const TABLE_NOTIFICATIONS = 'fa_cal_notifications';
+    private const TABLE_OCCURRENCES  = 'fa_cal_event_occurrences';
 
     /**
      * Default entry duration in minutes used when only one boundary is provided.
@@ -180,6 +182,11 @@ class CalendarService
 
         $this->saveEntry($entry);
 
+        // Pre-generate occurrences for recurring entries
+        if ($entry->getRecurrenceRule() !== null && $entry->getRecurrenceRule() !== '') {
+            $this->generateOccurrences($entry);
+        }
+
         // Auto-invite the assigned_to user so their free/busy shows in
         // the availability grid when creating events for other users.
         $assignedTo = $entry->getAssignedTo();
@@ -281,6 +288,19 @@ class CalendarService
         $this->applyDefaultDuration($entry);
 
         $this->saveEntry($entry);
+
+        // Regenerate occurrences if recurrence_rule present; clean up if removed.
+        if ($entry->getRecurrenceRule() !== null && $entry->getRecurrenceRule() !== '') {
+            $this->generateOccurrences($entry);
+        } else {
+            // Occurrences table uses hard DELETE, which is safe because
+            // generateOccurrences() also does hard DELETE before regeneration.
+            $this->db->executeUpdate(
+                "DELETE FROM " . self::TABLE_OCCURRENCES . " WHERE entry_id = ?",
+                [(string) $entry->getId()]
+            );
+        }
+
         $this->events->dispatch(new CalendarEntryUpdatedEvent($entry));
 
         $this->logger->info('Calendar entry updated', ['id' => $id]);
@@ -293,6 +313,12 @@ class CalendarService
 
         $sql = "UPDATE " . self::TABLE_ENTRIES . " SET inactive = 1 WHERE id = ?";
         $this->db->executeUpdate($sql, [(string) $id]);
+
+        // Soft-delete occurrences
+        $this->db->executeUpdate(
+            "UPDATE " . self::TABLE_OCCURRENCES . " SET inactive = 1, status = 'cancelled' WHERE entry_id = ?",
+            [(string) $id]
+        );
 
         $this->events->dispatch(new CalendarEntryDeletedEvent($entry));
         $this->logger->info('Calendar entry deleted', ['id' => $id]);
@@ -352,12 +378,14 @@ class CalendarService
                     (start_date BETWEEN ? AND ?)
                     OR (end_date BETWEEN ? AND ?)
                     OR (start_date <= ? AND end_date >= ?)
+                    OR (recurrence_rule IS NOT NULL AND recurrence_rule != '' AND parent_entry_id IS NULL AND start_date < ?)
                 )";
 
         $params = [
             $start->format('Y-m-d'), $end->format('Y-m-d'),
             $start->format('Y-m-d'), $end->format('Y-m-d'),
             $start->format('Y-m-d'), $end->format('Y-m-d'),
+            $end->format('Y-m-d'),
         ];
 
         if (!empty($filters['source'])) {
@@ -842,6 +870,7 @@ class CalendarService
                     is_billable = ?, billable_rate = ?, billable_currency = ?,
                      auto_invoice = ?, sales_order_id = ?,
                      recurrence_rule = ?, recurrence_end_date = ?, recurrence_count = ?,
+                     delta = ?, needs_review = ?,
                      updated_at = NOW()
                      WHERE id = ?";
 
@@ -881,10 +910,11 @@ class CalendarService
                 $entry->getRecurrenceRule(),
                 $entry->getRecurrenceEndDate() !== null ? $entry->getRecurrenceEndDate()->format('Y-m-d H:i:s') : null,
                 $entry->getRecurrenceCount(),
+                $entry->getDelta(),
+                $entry->getNeedsReview() ? 1 : 0,
                 $entry->getId() !== null ? (string) $entry->getId() : null,
             ];
         } else {
-            // INSERT: 39 column placeholders (created_at/updated_at use NOW()). 39 params.
             $sql = "INSERT INTO " . self::TABLE_ENTRIES . " (
                     source, source_id, source_type, title, description,
                     start_date, end_date, all_day, timezone, location,
@@ -896,8 +926,9 @@ class CalendarService
                     is_billable, billable_rate, billable_currency,
                     auto_invoice, sales_order_id,
                     recurrence_rule, recurrence_end_date, recurrence_count,
+                    delta, needs_review,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
 
             $params = [
                 $entry->getSource(),
@@ -940,6 +971,8 @@ class CalendarService
                 $entry->getRecurrenceRule(),
                 $entry->getRecurrenceEndDate() !== null ? $entry->getRecurrenceEndDate()->format('Y-m-d H:i:s') : null,
                 $entry->getRecurrenceCount(),
+                $entry->getDelta(),
+                $entry->getNeedsReview() ? 1 : 0,
             ];
         }
 
@@ -1837,6 +1870,258 @@ class CalendarService
         ];
 
         return $this->createEntry($data);
+    }
+
+    // ---------------------------------------------------------------
+    // v1.9.0 — Occurrence management
+    // ---------------------------------------------------------------
+
+    /**
+     * Generate occurrence rows for a recurring entry.
+     *
+     * Parses the entry's recurrence_rule (iCal RRULE format) and inserts
+     * one row per occurrence into fa_cal_event_occurrences. Existing
+     * occurrence rows with the same entry_id are replaced.
+     *
+     * @param CalendarEntry $entry  The recurring parent entry.
+     * @return int                  Number of occurrences generated.
+     * @since 1.9.0
+     */
+    public function generateOccurrences(CalendarEntry $entry): int
+    {
+        $rrule = $entry->getRecurrenceRule();
+        if (empty($rrule)) {
+            return 0;
+        }
+
+        // Delete existing occurrences for this entry.
+        $this->db->executeUpdate(
+            "DELETE FROM " . self::TABLE_OCCURRENCES . " WHERE entry_id = ?",
+            [(string) $entry->getId()]
+        );
+
+        $parts = $this->parseRRule($rrule);
+        if (empty($parts)) {
+            return 0;
+        }
+
+        $startDate  = $entry->getStartDate();
+        $endDate    = $entry->getEndDate() ?: $startDate;
+        if (!$startDate) {
+            return 0;
+        }
+        $duration   = $endDate->getTimestamp() - $startDate->getTimestamp();
+
+        $freq       = strtoupper($parts['FREQ'] ?? 'DAILY');
+        $interval   = max(1, (int) ($parts['INTERVAL'] ?? 1));
+        $count      = isset($parts['COUNT']) ? (int) $parts['COUNT'] : null;
+        $until      = isset($parts['UNTIL']) ? new DateTime($parts['UNTIL']) : null;
+
+        // Generate up to 1000 occurrences to prevent runaway generation.
+        $maxCount  = $count !== null ? $count : 1000;
+        if ($maxCount > 1000) {
+            $maxCount = 1000;
+        }
+
+        $occurrences = [];
+        $current     = clone $startDate;
+        $idx         = 0;
+
+        while ($idx < $maxCount) {
+            $occEnd = (clone $current)->setTimestamp($current->getTimestamp() + $duration);
+
+            $occurrences[] = [
+                'entry_id'      => $entry->getId(),
+                'recurrence_id' => $idx,
+                'start_date'    => $current->format('Y-m-d H:i:s'),
+                'end_date'      => $occEnd->format('Y-m-d H:i:s'),
+                'status'        => 'active',
+                'inactive'      => 0,
+            ];
+
+            $idx++;
+
+            // Check termination conditions BEFORE computing next occurrence.
+            if ($count !== null && $idx >= $count) {
+                break;
+            }
+
+            // Advance to next occurrence.
+            $this->addInterval($current, $freq, $interval);
+
+            if ($until !== null && $current > $until) {
+                break;
+            }
+        }
+
+        foreach ($occurrences as $occData) {
+            $this->db->executeUpdate(
+                "INSERT INTO " . self::TABLE_OCCURRENCES . "
+                 (entry_id, recurrence_id, start_date, end_date, status, inactive)
+                 VALUES (?, ?, ?, ?, ?, ?)",
+                [
+                    (string) $occData['entry_id'],
+                    (string) $occData['recurrence_id'],
+                    $occData['start_date'],
+                    $occData['end_date'],
+                    $occData['status'],
+                    '0',
+                ]
+            );
+        }
+
+        return count($occurrences);
+    }
+
+    /**
+     * Parse an iCal RRULE string into its component parts.
+     *
+     * @param string $rrule  e.g. "FREQ=WEEKLY;INTERVAL=2;COUNT=10"
+     * @return array         e.g. ['FREQ'=>'WEEKLY','INTERVAL'=>'2','COUNT'=>'10']
+     * @since 1.9.0
+     */
+    private function parseRRule(string $rrule): array
+    {
+        $parts = [];
+        $pairs = explode(';', $rrule);
+        foreach ($pairs as $pair) {
+            $kv = explode('=', $pair, 2);
+            if (count($kv) === 2) {
+                $parts[strtoupper(trim($kv[0]))] = trim($kv[1]);
+            }
+        }
+        return $parts;
+    }
+
+    /**
+     * Add a recurrence interval to a DateTime.
+     *
+     * @param DateTime $dt       The date to advance (modified in place).
+     * @param string   $freq     DAILY|WEEKLY|MONTHLY|YEARLY
+     * @param int      $interval How many units to add (default 1).
+     * @return void
+     * @since 1.9.0
+     */
+    private function addInterval(DateTime $dt, string $freq, int $interval = 1): void
+    {
+        switch ($freq) {
+            case 'DAILY':
+                $dt->modify("+{$interval} day");
+                break;
+            case 'WEEKLY':
+                $dt->modify("+{$interval} week");
+                break;
+            case 'MONTHLY':
+                $dt->modify("+{$interval} month");
+                break;
+            case 'YEARLY':
+                $dt->modify("+{$interval} year");
+                break;
+        }
+    }
+
+    /**
+     * Get occurrences (active, non-cancelled) for a date range.
+     *
+     * @param DateTime $start    Range start.
+     * @param DateTime $end      Range end.
+     * @param array    $filters  Optional filters (entry_id).
+     * @return array             Array of CalendarOccurrence arrays.
+     * @since 1.9.0
+     */
+    public function getOccurrencesForDateRange(DateTime $start, DateTime $end, array $filters = []): array
+    {
+        $sql = "SELECT * FROM " . self::TABLE_OCCURRENCES . "
+                WHERE inactive = 0 AND status != 'cancelled'
+                  AND start_date < ? AND end_date > ?";
+        $params = [
+            $end->format('Y-m-d H:i:s'),
+            $start->format('Y-m-d H:i:s'),
+        ];
+
+        if (!empty($filters['entry_id'])) {
+            $sql .= " AND entry_id = ?";
+            $params[] = (string) $filters['entry_id'];
+        }
+
+        $sql .= " ORDER BY start_date ASC";
+
+        $rows = $this->db->fetchAll($sql, $params);
+        $result = [];
+        foreach ($rows as $row) {
+            $result[] = CalendarOccurrence::fromArray($row);
+        }
+        return $result;
+    }
+
+    /**
+     * Get occurrences for specific parent entry IDs in a date range.
+     *
+     * @param int[]    $parentIds Parent entry IDs.
+     * @param DateTime $start     Range start.
+     * @param DateTime $end       Range end.
+     * @return CalendarOccurrence[]
+     * @since 1.9.0
+     */
+    public function getOccurrencesByParentIds(array $parentIds, DateTime $start, DateTime $end): array
+    {
+        if (empty($parentIds)) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($parentIds), '?'));
+        $sql = "SELECT * FROM " . self::TABLE_OCCURRENCES . "
+                WHERE inactive = 0 AND status != 'cancelled'
+                  AND entry_id IN ($placeholders)
+                  AND start_date < ? AND end_date > ?
+                ORDER BY entry_id, recurrence_id ASC";
+        $params = array_merge(
+            array_map('strval', $parentIds),
+            [$end->format('Y-m-d H:i:s'), $start->format('Y-m-d H:i:s')]
+        );
+        $rows = $this->db->fetchAll($sql, $params);
+        $result = [];
+        foreach ($rows as $row) {
+            $result[] = CalendarOccurrence::fromArray($row);
+        }
+        return $result;
+    }
+
+    /**
+     * Cancel (soft-delete) an occurrence.
+     *
+     * @param int $occurrenceId
+     * @return void
+     * @since 1.9.0
+     */
+    public function cancelOccurrence(int $occurrenceId): void
+    {
+        $this->db->executeUpdate(
+            "UPDATE " . self::TABLE_OCCURRENCES . " SET inactive = 1, status = 'cancelled' WHERE id = ?",
+            [(string) $occurrenceId]
+        );
+    }
+
+    /**
+     * Cancel all future occurrences for an entry (from a given recurrence_id forward).
+     *
+     * @param int $entryId       The recurring parent entry ID.
+     * @param int $fromRecurrenceId  Cancel from this index onward.
+     * @return int               Number of occurrences cancelled.
+     * @since 1.9.0
+     */
+    public function cancelFutureOccurrences(int $entryId, int $fromRecurrenceId): int
+    {
+        $cancelled = 0;
+        $rows = $this->db->fetchAll(
+            "SELECT id FROM " . self::TABLE_OCCURRENCES . "
+             WHERE entry_id = ? AND recurrence_id >= ? AND inactive = 0",
+            [(string) $entryId, (string) $fromRecurrenceId]
+        );
+        foreach ($rows as $row) {
+            $this->cancelOccurrence((int) $row['id']);
+            $cancelled++;
+        }
+        return $cancelled;
     }
 
     // ---------------------------------------------------------------

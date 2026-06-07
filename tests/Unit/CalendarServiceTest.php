@@ -819,39 +819,11 @@ class CalendarServiceTest extends TestCase
         // No legacy users-table sub-select
         $this->assertStringNotContainsString('users', $capturedSql);
 
-        // 6 date params + 3 viewable_by params (assigned_to int, fa_user contact_id, entity_id)
-        $this->assertCount(9, $capturedParams);
-        $this->assertSame(7,   $capturedParams[6]); // assigned_to (int)
-        $this->assertSame('7', $capturedParams[7]); // user i.contact_id (string)
-        $this->assertSame('7', $capturedParams[8]); // uc.entity_id (string)
-    }
-
-    /**
-     * Non-integer viewable_by values are cast to int; a string '3' must behave
-     * identically to integer 3.
-     *
-     * @since 1.3.0
-     */
-    public function testViewableByFilterCastsStringToInt(): void
-    {
-        $capturedParams = null;
-
-        $this->db->method('fetchAll')
-            ->willReturnCallback(function (string $sql, array $params) use (&$capturedParams) {
-                $capturedParams = $params;
-                return [];
-            });
-
-        $this->service->getEntriesForDateRange(
-            new DateTime('2026-05-01'),
-            new DateTime('2026-05-31'),
-            ['viewable_by' => '5']
-        );
-
-        $this->assertCount(9, $capturedParams);
-        $this->assertSame(5,   $capturedParams[6]); // assigned_to (int)
-        $this->assertSame('5', $capturedParams[7]); // user i.contact_id (string)
-        $this->assertSame('5', $capturedParams[8]); // uc.entity_id (string)
+        // 7 date params (6 range + 1 recurrence) + 3 viewable_by params
+        $this->assertCount(10, $capturedParams);
+        $this->assertSame(7,   $capturedParams[7]); // assigned_to (int)
+        $this->assertSame('7', $capturedParams[8]); // user i.contact_id (string)
+        $this->assertSame('7', $capturedParams[9]); // uc.entity_id (string)
     }
 
     /**

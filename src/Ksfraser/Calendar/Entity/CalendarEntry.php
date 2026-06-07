@@ -224,6 +224,24 @@ class CalendarEntry
     private ?int $recurrenceCount;
 
     /**
+     * JSON delta of fields changed vs the immediate parent in the override chain.
+     * Used by edit-scope logic to detect conflicts during series edits.
+     *
+     * @var string|null
+     * @since 1.9.0
+     */
+    private ?string $delta;
+
+    /**
+     * Flagged for user review when a series edit created a potential conflict
+     * with existing overrides.
+     *
+     * @var bool
+     * @since 1.9.0
+     */
+    private bool $needsReview;
+
+    /**
      * In-memory collection of CalendarInvitee objects.
      * Covers both person attendees (contact_type = fa_user|crm_contact|ad_hoc)
      * and resource bookings (contact_type = resource, is_resource = 1).
@@ -267,6 +285,9 @@ class CalendarEntry
         $this->private = false;
         $this->recurrenceRule = null;
         $this->recurrenceId = null;
+        $this->recurrenceCount = null;
+        $this->delta = null;
+        $this->needsReview = false;
         $this->inactive = false;
         $this->createdAt = new DateTime();
         $this->updatedAt = new DateTime();
@@ -968,6 +989,54 @@ class CalendarEntry
     }
 
     /**
+     * Get the JSON delta string.
+     *
+     * @return string|null
+     * @since 1.9.0
+     */
+    public function getDelta(): ?string
+    {
+        return $this->delta;
+    }
+
+    /**
+     * Set the JSON delta string.
+     *
+     * @param string|null $delta
+     * @return self
+     * @since 1.9.0
+     */
+    public function setDelta(?string $delta): self
+    {
+        $this->delta = $delta;
+        return $this;
+    }
+
+    /**
+     * Check if this entry is flagged for review.
+     *
+     * @return bool
+     * @since 1.9.0
+     */
+    public function getNeedsReview(): bool
+    {
+        return $this->needsReview;
+    }
+
+    /**
+     * Set the needs-review flag.
+     *
+     * @param bool $needsReview
+     * @return self
+     * @since 1.9.0
+     */
+    public function setNeedsReview(bool $needsReview): self
+    {
+        $this->needsReview = $needsReview;
+        return $this;
+    }
+
+    /**
      * Get the in-memory invitee collection.
      *
      * @return CalendarInvitee[]
@@ -1202,6 +1271,8 @@ class CalendarEntry
             'sales_order_id' => $this->salesOrderId,
             'recurrence_end_date' => $this->recurrenceEndDate !== null ? $this->recurrenceEndDate->format('Y-m-d H:i:s') : null,
             'recurrence_count'    => $this->recurrenceCount,
+            'delta'               => $this->delta,
+            'needs_review'        => $this->needsReview ? 1 : 0,
         ];
     }
 
@@ -1265,6 +1336,8 @@ class CalendarEntry
         $entry->setRecurrenceCount(
             isset($data['recurrence_count']) ? (int) $data['recurrence_count'] : null
         );
+        $entry->setDelta($data['delta'] ?? null);
+        $entry->setNeedsReview((bool) ($data['needs_review'] ?? false));
 
         return $entry;
     }
