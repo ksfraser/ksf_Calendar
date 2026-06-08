@@ -54,6 +54,7 @@ class CalendarService
     private $events;
     private $logger;
     private $projectService;
+    private $notificationPublisher = null;
 
     public function __construct(
         DatabaseAdapterInterface $db,
@@ -65,6 +66,19 @@ class CalendarService
         $this->events = $events;
         $this->logger = $logger;
         $this->projectService = $projectService;
+    }
+
+    /**
+     * Optional reminder/notification publisher used by adapters to bridge
+     * reminder creation into shared notification infrastructure.
+     *
+     * @param callable|null $publisher function (CalendarEntry $entry): void
+     * @return self
+     */
+    public function setNotificationPublisher(callable $publisher = null): self
+    {
+        $this->notificationPublisher = $publisher;
+        return $this;
     }
 
     public function createEntry(array $data): CalendarEntry
@@ -1869,7 +1883,13 @@ class CalendarService
             'parent_entry_id'  => $parentEntryId,
         ];
 
-        return $this->createEntry($data);
+        $reminder = $this->createEntry($data);
+
+        if (is_callable($this->notificationPublisher)) {
+            ($this->notificationPublisher)($reminder);
+        }
+
+        return $reminder;
     }
 
     // ---------------------------------------------------------------

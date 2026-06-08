@@ -219,4 +219,21 @@ class CalendarServiceReminderTest extends TestCase
 
         $this->service->createReminderEntry(999, 30);
     }
+
+    public function testCreateReminderEntryInvokesNotificationPublisher(): void
+    {
+        $this->db->method('fetchAssoc')
+            ->willReturnOnConsecutiveCalls($this->makeParentRow(), null);
+        $this->db->method('executeUpdate')->willReturn(1);
+        $this->db->method('lastInsertId')->willReturn('100');
+
+        $called = false;
+        $this->service->setNotificationPublisher(function (CalendarEntry $entry) use (&$called): void {
+            $called = true;
+            $this->assertSame(CalendarEntry::TYPE_REMINDER, $entry->getSourceType());
+        });
+
+        $this->service->createReminderEntry(10, 20);
+        $this->assertTrue($called);
+    }
 }
