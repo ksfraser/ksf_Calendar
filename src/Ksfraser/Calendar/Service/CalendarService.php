@@ -2287,7 +2287,7 @@ class CalendarService
                 $data['is_organizer'] ? 1 : 0,
                 $data['is_resource']  ? 1 : 0,
                 $data['invited_at'],
-                $data['individual_status'] ?? '',
+                $data['individual_status'] ?? 'planned',
             ]
         );
 

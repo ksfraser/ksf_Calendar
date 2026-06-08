@@ -184,7 +184,7 @@ class CalendarInvitee
         $this->invitedAt   = null;
         $this->respondedAt = null;
         $this->inactive    = false;
-        $this->individualStatus          = null;
+        $this->individualStatus          = 'planned';
         $this->individualStatusUpdatedAt = null;
     }
 
