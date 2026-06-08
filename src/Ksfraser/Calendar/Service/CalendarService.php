@@ -2124,6 +2124,115 @@ class CalendarService
         return $cancelled;
     }
 
+    /**
+     * Cancel a single occurrence by entry_id and recurrence_id.
+     *
+     * @param int $entryId       The recurring parent entry ID.
+     * @param int $recurrenceId  The 0-based occurrence index to cancel.
+     * @return void
+     * @since 1.9.0
+     */
+    public function cancelOccurrenceByRecurrenceId(int $entryId, int $recurrenceId): void
+    {
+        $this->db->executeUpdate(
+            "UPDATE " . self::TABLE_OCCURRENCES . " SET inactive = 1, status = 'cancelled'
+             WHERE entry_id = ? AND recurrence_id = ?",
+            [(string) $entryId, (string) $recurrenceId]
+        );
+    }
+
+    /**
+     * Truncate a recurring series so only occurrences before the given index
+     * remain. The parent's recurrence rule is updated (COUNT set to the given
+     * index, UNTIL removed) and occurrences are regenerated.
+     *
+     * @param int $entryId       The recurring parent entry ID.
+     * @param int $recurrenceId  Cutoff index — occurrences at this index and beyond are removed.
+     * @return void
+     * @since 1.9.0
+     */
+    public function truncateSeries(int $entryId, int $recurrenceId): void
+    {
+        $entry = $this->getEntry($entryId);
+        $rrule = $entry->getRecurrenceRule();
+        if (empty($rrule)) {
+            return;
+        }
+
+        $parts = $this->parseRRule($rrule);
+
+        $parts['COUNT'] = (string) $recurrenceId;
+        unset($parts['UNTIL']);
+
+        $newRrule = [];
+        foreach ($parts as $k => $v) {
+            $newRrule[] = "{$k}={$v}";
+        }
+        $entry->setRecurrenceRule(implode(';', $newRrule));
+        $this->saveEntry($entry);
+
+        $this->generateOccurrences($entry);
+    }
+
+    /**
+     * Fork a recurring series at a given occurrence index.
+     *
+     * 1. Truncates the original parent's recurrence to end before the occurrence.
+     * 2. Creates a new entry with the given $newData and a recurrence starting
+     *    from the current occurrence.
+     *
+     * @param int   $parentId      The recurring parent entry ID.
+     * @param int   $recurrenceId  The 0-based occurrence index to fork at.
+     * @param array $newData       Entry data for the new forked series.
+     * @return int                 The new entry's ID.
+     * @throws \RuntimeException   If the occurrence is not found.
+     * @since 1.9.0
+     */
+    public function forkSeries(int $parentId, int $recurrenceId, array $newData): int
+    {
+        $parent = $this->getEntry($parentId);
+
+        $rows = $this->db->fetchAll(
+            "SELECT * FROM " . self::TABLE_OCCURRENCES . "
+             WHERE entry_id = ? AND recurrence_id = ?",
+            [(string) $parentId, (string) $recurrenceId]
+        );
+        if (empty($rows)) {
+            throw new \RuntimeException(
+                "Occurrence not found for entry_id={$parentId}, recurrence_id={$recurrenceId}"
+            );
+        }
+        $occurrence = CalendarOccurrence::fromArray($rows[0]);
+
+        $this->truncateSeries($parentId, $recurrenceId);
+
+        $rrule = $parent->getRecurrenceRule();
+        $parts = $this->parseRRule($rrule ?? '');
+        $originalCount = isset($parts['COUNT']) ? (int) $parts['COUNT'] : null;
+        if ($originalCount !== null) {
+            $remaining = $originalCount - $recurrenceId;
+            $parts['COUNT'] = (string) max(1, $remaining);
+        }
+
+        $newRruleParts = [];
+        foreach ($parts as $k => $v) {
+            $newRruleParts[] = "{$k}={$v}";
+        }
+        $newRrule = implode(';', $newRruleParts);
+
+        $newData['start_date'] = $occurrence->getStartDate()->format('Y-m-d H:i:s');
+        $newData['end_date']   = $occurrence->getEndDate()->format('Y-m-d H:i:s');
+        $newData['recurrence_rule'] = $newRrule;
+        $newData['source']       = $newData['source']       ?? $parent->getSource();
+        $newData['source_type']  = $newData['source_type']  ?? $parent->getSourceType();
+        $newData['assigned_to']  = $newData['assigned_to']  ?? $parent->getAssignedTo();
+        $newData['user_id']      = $newData['user_id']      ?? $parent->getUserId();
+
+        $newEntry = $this->createEntry($newData);
+
+        return $newEntry->getId();
+    }
+
     // ---------------------------------------------------------------
     // Private helpers
     // ---------------------------------------------------------------

@@ -609,12 +609,12 @@ class CalendarEntryDTO
         $dtFormat   = 'Y-m-d\TH:i:s';
         $startFormat = ($allDay === 'yes') ? $dateFormat : $dtFormat;
         $endFormat   = ($allDay === 'yes') ? $dateFormat : $dtFormat;
-        $dto->id            = $occurrence->getId();
+        $dto->id            = $parent->getId() . '-occ-' . $occurrence->getRecurrenceId();
         $dto->startDate     = $occurrence->getStartDate()->format($startFormat);
         $dto->endDate       = $occurrence->getEndDate()->format($endFormat);
         $dto->recurrenceId  = $occurrence->getRecurrenceId();
         $dto->parentEntryId = $parent->getId();
-        $dto->recurrenceRule = null;
+        $dto->recurrenceRule = $parent->getRecurrenceRule();
         return $dto;
     }
 
