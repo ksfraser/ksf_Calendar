@@ -158,6 +158,9 @@ class CalendarService
         if (isset($data['parent_entry_id'])) {
             $entry->setParentEntryId((int) $data['parent_entry_id']);
         }
+        if (isset($data['recurrence_id'])) {
+            $entry->setRecurrenceId((int) $data['recurrence_id']);
+        }
         if (isset($data['guest_policy'])) {
             $entry->setGuestPolicy($data['guest_policy']);
         }
@@ -871,7 +874,7 @@ class CalendarService
         $endDateStr   = $entry->getEndDate()   !== null ? $entry->getEndDate()->format('Y-m-d H:i:s')   : null;
 
         if ($exists) {
-            // UPDATE: 32 SET columns + 1 WHERE id = ? = 33 params total.
+            // UPDATE: 38 SET columns + 1 WHERE id = ? = 39 params total.
             $sql = "UPDATE " . self::TABLE_ENTRIES . " SET
                     title = ?, description = ?, start_date = ?, end_date = ?,
                     all_day = ?, location = ?, online_url = ?, phone_number = ?,
@@ -880,7 +883,7 @@ class CalendarService
                     status = ?, priority = ?, color = ?, private = ?,
                     reminder = ?, reminder_minutes = ?,
                     direction = ?, meeting_number = ?, meeting_passcode = ?,
-                    is_scheduled = ?, parent_entry_id = ?, guest_policy = ?,
+                    is_scheduled = ?, parent_entry_id = ?, recurrence_id = ?, guest_policy = ?,
                     is_billable = ?, billable_rate = ?, billable_currency = ?,
                      auto_invoice = ?, sales_order_id = ?,
                      recurrence_rule = ?, recurrence_end_date = ?, recurrence_count = ?,
@@ -915,6 +918,7 @@ class CalendarService
                 $entry->getMeetingPasscode(),
                 $entry->isScheduled() ? 1 : 0,
                 $entry->getParentEntryId(),
+                $entry->getRecurrenceId(),
                 $entry->getGuestPolicy(),
                 $entry->isBillable() ? 1 : 0,
                 $entry->getBillableRate(),
@@ -936,13 +940,13 @@ class CalendarService
                     assigned_to, user_id, customer_id, project_id, task_id, contact_id,
                     status, priority, category, reminder, reminder_minutes, color, private,
                     direction, meeting_number, meeting_passcode,
-                    is_scheduled, parent_entry_id, guest_policy,
+                    is_scheduled, parent_entry_id, recurrence_id, guest_policy,
                     is_billable, billable_rate, billable_currency,
                     auto_invoice, sales_order_id,
                     recurrence_rule, recurrence_end_date, recurrence_count,
                     delta, needs_review,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
 
             $params = [
                 $entry->getSource(),
@@ -976,6 +980,7 @@ class CalendarService
                 $entry->getMeetingPasscode(),
                 $entry->isScheduled() ? 1 : 0,
                 $entry->getParentEntryId(),
+                $entry->getRecurrenceId(),
                 $entry->getGuestPolicy(),
                 $entry->isBillable() ? 1 : 0,
                 $entry->getBillableRate(),
