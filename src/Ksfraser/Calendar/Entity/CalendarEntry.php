@@ -1315,7 +1315,7 @@ class CalendarEntry
         $entry->setColor($data['color'] ?? '');
         $entry->setPrivate((bool) ($data['private'] ?? false));
         $entry->setRecurrenceRule($data['recurrence_rule'] ?? null);
-        $entry->setRecurrenceId($data['recurrence_id'] ?? null);
+        $entry->setRecurrenceId(isset($data['recurrence_id']) && $data['recurrence_id'] !== '' ? (int) $data['recurrence_id'] : null);
         $entry->setInactive((bool) ($data['inactive'] ?? false));
         $entry->setIsScheduled((bool) ($data['is_scheduled'] ?? false));
         if (isset($data['parent_entry_id']) && $data['parent_entry_id'] !== null) {
