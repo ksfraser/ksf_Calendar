@@ -346,6 +346,12 @@ class CalendarEntry
         return $this->sourceType;
     }
 
+    public function setSourceType(string $sourceType): self
+    {
+        $this->sourceType = $sourceType;
+        return $this;
+    }
+
     public function getTitle(): string
     {
         return $this->title;

@@ -301,6 +301,9 @@ class CalendarService
         if (array_key_exists('recurrence_rule', $data)) {
             $entry->setRecurrenceRule($data['recurrence_rule'] ?: null);
         }
+        if (isset($data['source_type'])) {
+            $entry->setSourceType($data['source_type']);
+        }
 
         $this->applyDefaultDuration($entry);
 
@@ -874,9 +877,9 @@ class CalendarService
         $endDateStr   = $entry->getEndDate()   !== null ? $entry->getEndDate()->format('Y-m-d H:i:s')   : null;
 
         if ($exists) {
-            // UPDATE: 38 SET columns + 1 WHERE id = ? = 39 params total.
+            // UPDATE: 39 SET columns + 1 WHERE id = ? = 40 params total.
             $sql = "UPDATE " . self::TABLE_ENTRIES . " SET
-                    title = ?, description = ?, start_date = ?, end_date = ?,
+                    source_type = ?, title = ?, description = ?, start_date = ?, end_date = ?,
                     all_day = ?, location = ?, online_url = ?, phone_number = ?,
                     send_invites = ?, assigned_to = ?, user_id = ?,
                     customer_id = ?, project_id = ?, task_id = ?, contact_id = ?,
@@ -892,6 +895,7 @@ class CalendarService
                      WHERE id = ?";
 
             $params = [
+                $entry->getSourceType(),
                 $entry->getTitle(),
                 $entry->getDescription(),
                 $startDateStr,
