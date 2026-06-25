@@ -282,11 +282,11 @@ class iCalService
         }
 
         $entry = new CalendarEntry(
-            source: $source,
-            sourceId: $uid ?: uniqid('ical_'),
-            sourceType: CalendarEntry::TYPE_EVENT,
-            title: $summary ?: 'Untitled Event',
-            startDate: $startDate
+            $source,
+            $uid ?: uniqid('ical_'),
+            CalendarEntry::TYPE_EVENT,
+            $summary ?: 'Untitled Event',
+            $startDate
         );
 
         $entry->setEndDate($endDate);
