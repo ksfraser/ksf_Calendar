@@ -263,3 +263,14 @@ All development is done in the **devel tree** (`~/Documents/ksf_Calendar`). Do *
 | `~/Documents/ksf_Calendar` | Devel tree — all development, testing, commits |
 | `~/ksf_Infrastructure/fa_modules/ksf_Calendar` | UAT bind point — deployment target, integration testing (if mirrored) |
 
+
+---
+
+## Architecture docs (hardlinked)
+
+Canonical ecosystem/architecture docs are hardlinked in this repo root
+(mode 0444): `MODULE_DIRECTORY.md`, `APP_TAB_ARCHITECTURE.md`, `PACKAGIST.md`.
+Hardlinks do NOT survive `git pull`/`checkout`/`clone` — after any git
+operation re-run:
+`ln -f /home/kevin/Documents/<doc> <repo-root>/<doc>`
+Full rule + carrier list: `/home/kevin/Documents/AGENTS_APPENDIX.md`.
