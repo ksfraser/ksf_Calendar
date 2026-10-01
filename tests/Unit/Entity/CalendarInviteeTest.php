@@ -142,7 +142,7 @@ class CalendarInviteeTest extends TestCase
 
     public function testContactTypeConstants(): void
     {
-        $this->assertSame('user',         CalendarInvitee::TYPE_FA_USER);
+        $this->assertSame(CalendarInvitee::TYPE_FA_USER, 'fa_user');
         $this->assertSame('crm_contact', CalendarInvitee::TYPE_CRM_CONTACT);
         $this->assertSame('resource',    CalendarInvitee::TYPE_RESOURCE);
         $this->assertSame('ad_hoc',      CalendarInvitee::TYPE_AD_HOC);
@@ -259,14 +259,17 @@ class CalendarInviteeTest extends TestCase
     }
 
     /**
-     * individual_status defaults to null on construction.
+     * individual_status defaults to 'planned' on construction.
+     *
+     * The default was changed from null to 'planned' so the DB column and the
+     * PHP default agree and saveInvitee() does not need a null fallback.
      *
      * @since 1.3.0
      */
-    public function testIndividualStatusDefaultsToNull(): void
+    public function testIndividualStatusDefaultsToPlanned(): void
     {
         $invitee = $this->makeInvitee();
-        $this->assertNull($invitee->getIndividualStatus());
+        $this->assertSame(CalendarInvitee::INDIVIDUAL_STATUS_PLANNED, $invitee->getIndividualStatus());
         $this->assertNull($invitee->getIndividualStatusUpdatedAt());
     }
 
@@ -333,15 +336,15 @@ class CalendarInviteeTest extends TestCase
     }
 
     /**
-     * toArray() individual_status_updated_at is null when status is null.
+     * toArray() carries the 'planned' default and a null updated_at.
      *
      * @since 1.3.0
      */
-    public function testToArrayIndividualStatusNullWhenNotSet(): void
+    public function testToArrayIndividualStatusDefaultWhenNotSet(): void
     {
         $arr = $this->makeInvitee()->toArray();
 
-        $this->assertNull($arr['individual_status']);
+        $this->assertSame(CalendarInvitee::INDIVIDUAL_STATUS_PLANNED, $arr['individual_status']);
         $this->assertNull($arr['individual_status_updated_at']);
     }
 
@@ -365,11 +368,11 @@ class CalendarInviteeTest extends TestCase
     }
 
     /**
-     * fromArray() with no individual_status key leaves it null.
+     * fromArray() with no individual_status key keeps the 'planned' default.
      *
      * @since 1.3.0
      */
-    public function testFromArrayMissingIndividualStatusIsNull(): void
+    public function testFromArrayMissingIndividualStatusKeepsDefault(): void
     {
         $invitee = CalendarInvitee::fromArray([
             'entry_id'     => 1,
@@ -378,7 +381,7 @@ class CalendarInviteeTest extends TestCase
             'email'        => 'nostatus@example.com',
         ]);
 
-        $this->assertNull($invitee->getIndividualStatus());
+        $this->assertSame(CalendarInvitee::INDIVIDUAL_STATUS_PLANNED, $invitee->getIndividualStatus());
     }
 
     // ---------------------------------------------------------------

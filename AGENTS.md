@@ -43,8 +43,28 @@ switch to `ksf_payment_destinations/` immediately.
   (forgotten `MODULENAME`) copies — and the package's own `Common\Utils` copy — can
   never redeclare or clobber. Details in `AGENTS_ARCH.md` §7.
 - **Square**: composer.json `config.platform.php = 7.4.33` pinned (commit
-  `b0ef4da`) for the PHP 7.4 container; lock regeneration is blocked locally on
-  the private `ksfraser/import-staging` package.
+  `b0ef4da`) for the PHP 7.4 container. The lock is no longer blocked — the
+  blocker was a phantom `ksfraser/import-staging` require (not on Packagist, and
+  the `ksfraser\FrontAccounting\ImportStaging\*` classes are autoloaded by the
+  `ksf_FA_ImportStagingProcessing` module's own vendor). Removed in commit
+  `493291f`; the vendor now resolves for 7.4 (http-foundation 5.4, csv 9.8).
+- **Vendor/runtime PHP mismatch is the top source of site-wide 500s.** The host
+  runs PHP 8.1 and the container 7.4, so a module without a
+  `config.platform.php` pin resolves for the wrong PHP. Symptoms are a
+  PHPUnit-10 eager-autoload `Parse error` (masked by FA's
+  `Call to undefined function end_page()`) or a `platform_check.php`
+  `E_USER_ERROR` naming a required PHP >= 8.1.2. Diagnose with
+  `ksf_Infrastructure/fa-modules-doctor.sh`, which probes the real container
+  rather than guessing package versions. Full procedure in
+  `ksf_Infrastructure/AGENTS_APPENDIX.md`.
+- **Two FA containers run at once and share one vendor tree.** Rootful
+  `ksfii_app-fa` on **8090** (overlay `FA/ksfii_app`) and rootless `ksf-fa` on
+  **8080** (overlay `FA/ksf_fa`, driven as `su - kevin -c`). Both are PHP
+  7.4.33 and both bind-mount `ksf_Infrastructure/fa_modules` at
+  `/var/www/html/modules`, so a bad vendor breaks both, but extension activation
+  is **per-instance** (separate `company/<id>/installed_extensions.php`). A module
+  can be a live landmine on one pod and dead code on the other, so always check
+  both before deciding something is harmless.
 - **FA_ProductAttributes issue #52 (child not detected as read-only)** root cause
   found: two parallel, un-unified parent-relationship mechanisms. Full write-up
   is in that repo's `AGENTS.local.md` (migrated out of this file).

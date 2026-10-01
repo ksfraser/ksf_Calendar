@@ -139,7 +139,7 @@ class CalendarServiceTest extends TestCase
                         [
                             'person_id'      => '1',
                             'crm_contact_id' => '10',
-                            'contact_type'   => 'user',
+                            'contact_type'   => CalendarInvitee::TYPE_FA_USER,
                             'entity_id'      => '3',
                             'name'           => 'Alice Smith',
                             'email'          => 'alice@example.com',
@@ -415,7 +415,8 @@ class CalendarServiceTest extends TestCase
         $this->assertCount(2, $result);
         $this->assertArrayHasKey('start', $result[0]);
         $this->assertArrayHasKey('end', $result[0]);
-        $this->assertSame('2026-05-18 09:00:00', $result[0]['start']);
+        // getFreeBusy() returns ISO-8601 (space replaced by T) for the grid widget.
+        $this->assertSame('2026-05-18T09:00:00', $result[0]['start']);
     }
 
     public function testGetFreeBusyFallsBackEndToStartWhenEndNull(): void
