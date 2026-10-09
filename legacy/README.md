@@ -1,24 +1,17 @@
-# legacy/ — code quarantined out of the autoload path
+# legacy/ — retired code kept for reference
 
-Nothing here is autoloaded, and nothing here is covered by the test suite.
+Nothing here is autoloaded and nothing here is tested.
 
-## iCalService.php.unloadable
+## iCalService (removed 2026-10)
 
-A 371-line iCal import/export service that **cannot be loaded at all**:
+The original `iCalService` was written against eluceo/ical **1.x** and could not be
+loaded at all — `PropertyFactory\FactoryTrait` and `Parameter\Value\ValueDateTime`
+were both removed in 2.x. Its import half also referenced `craigk5n/icalendar`,
+which is in neither `composer.json` nor `composer.lock`.
 
-- `use Eluceo\iCal\PropertyFactory\FactoryTrait;` — that trait was removed in
-  eluceo/ical 2.x. The installed version is 2.14.0, so this is 1.x API.
-  A missing trait is a **compile-time fatal**, not a catchable error.
-- `use Craigk5n\ICalendar\Reader;` and `use Craigk5n\ICalendar\Property;` — a
-  **second** iCal library, `craigk5n/icalendar`, which is neither in
-  `composer.json` nor in `composer.lock`, so it is not installed.
-- Nothing references the class: not `src/`, not `tests/`, not `composer.json`,
-  not `phpunit.xml`. It was invisible because nothing ever tried to load it.
+It was quarantined here rather than deleted because **.ical export is how KSF
+sends event invites to customers and employees**, so the export half was worth
+keeping. It has since been ported and lives at
+`src/ksfraser/Calendar/Service/ICalService.php`.
 
-It was moved here rather than deleted because iCal import/export is plausibly
-wanted functionality. Porting it is real work and needs a decision that has not
-been made: either rewrite against eluceo/ical 2.x, or add `craigk5n/icalendar`
-as a second dependency.
-
-`tools/check_autoload.php` exists so this cannot recur unnoticed — it flags any
-file under `src/` that is not autoloadable or whose dependencies do not resolve.
+Recovery: `git show 24cdef9:legacy/iCalService.php.unloadable`
