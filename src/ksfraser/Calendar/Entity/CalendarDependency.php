@@ -5,14 +5,14 @@
  * Represents a dependency relationship between two calendar entries.
  * Maps to the fa_cal_dependencies DB table.
  *
- * @package Ksfraser\Calendar\Entity
- * @UML Ksfraser\Calendar — CalendarDependency
+ * @package ksfraser\Calendar\Entity
+ * @UML ksfraser\Calendar — CalendarDependency
  * @since 1.4.0
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Entity;
+namespace ksfraser\Calendar\Entity;
 
 use DateTime;
 use DateTimeInterface;

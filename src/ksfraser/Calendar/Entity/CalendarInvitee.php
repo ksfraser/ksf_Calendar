@@ -14,13 +14,13 @@
  * contact_id stores 0_crm_contacts.id (INT) for person types (user, crm_contact)
  * and fa_resources.id (INT) for resource type; NULL for ad_hoc.
  *
- * @package Ksfraser\Calendar\Entity
+ * @package ksfraser\Calendar\Entity
  * @since   1.1.0
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Entity;
+namespace ksfraser\Calendar\Entity;
 
 use DateTime;
 

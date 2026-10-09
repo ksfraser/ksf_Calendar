@@ -2,7 +2,7 @@
 /**
  * Test Bootstrap
  *
- * @package Ksfraser\Calendar\Tests
+ * @package ksfraser\Calendar\Tests
  */
 
 declare(strict_types=1);

@@ -4,27 +4,27 @@
  *
  * Unified calendar service - aggregates PM tasks, CRM activities, HRM, client dates
  *
- * @package Ksfraser\Calendar\Service
+ * @package ksfraser\Calendar\Service
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Service;
+namespace ksfraser\Calendar\Service;
 
 use DateTime;
-use Ksfraser\Calendar\Entity\CalendarEntry;
-use Ksfraser\Calendar\Entity\CalendarInvitee;
-use Ksfraser\Calendar\Entity\CalendarSource;
-use Ksfraser\Calendar\Entity\CalendarDependency;
-use Ksfraser\Calendar\Entity\CalendarAttachment;
-use Ksfraser\Calendar\Entity\CalendarNotification;
-use Ksfraser\Calendar\Entity\CalendarOccurrence;
-use Ksfraser\Calendar\Contract\DatabaseAdapterInterface;
-use Ksfraser\Calendar\Contract\ProjectServiceInterface;
-use Ksfraser\Calendar\Event\CalendarEntryCreatedEvent;
-use Ksfraser\Calendar\Event\CalendarEntryUpdatedEvent;
-use Ksfraser\Calendar\Event\CalendarEntryDeletedEvent;
-use Ksfraser\Calendar\Exception\CalendarException;
+use ksfraser\Calendar\Entity\CalendarEntry;
+use ksfraser\Calendar\Entity\CalendarInvitee;
+use ksfraser\Calendar\Entity\CalendarSource;
+use ksfraser\Calendar\Entity\CalendarDependency;
+use ksfraser\Calendar\Entity\CalendarAttachment;
+use ksfraser\Calendar\Entity\CalendarNotification;
+use ksfraser\Calendar\Entity\CalendarOccurrence;
+use ksfraser\Calendar\Contract\DatabaseAdapterInterface;
+use ksfraser\Calendar\Contract\ProjectServiceInterface;
+use ksfraser\Calendar\Event\CalendarEntryCreatedEvent;
+use ksfraser\Calendar\Event\CalendarEntryUpdatedEvent;
+use ksfraser\Calendar\Event\CalendarEntryDeletedEvent;
+use ksfraser\Calendar\Exception\CalendarException;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 

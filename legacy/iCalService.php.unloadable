@@ -4,17 +4,17 @@
  *
  * Import/export iCal feeds using eluceo/ical for creation, php-icalendar-core for parsing
  *
- * @package Ksfraser\Calendar\Service
+ * @package ksfraser\Calendar\Service
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Service;
+namespace ksfraser\Calendar\Service;
 
 use DateTime;
 use DateTimeInterface;
-use Ksfraser\Calendar\Entity\CalendarEntry;
-use Ksfraser\Calendar\Entity\CalendarSource;
+use ksfraser\Calendar\Entity\CalendarEntry;
+use ksfraser\Calendar\Entity\CalendarSource;
 use Eluceo\iCal\Component\Calendar as iCalCalendar;
 use Eluceo\iCal\Component\Event as iCalEvent;
 use Eluceo\iCal\PropertyFactory\FactoryTrait;

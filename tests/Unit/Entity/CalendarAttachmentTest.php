@@ -2,20 +2,20 @@
 /**
  * CalendarAttachment Entity Test
  *
- * @package Ksfraser\Calendar\Tests\Unit\Entity
+ * @package ksfraser\Calendar\Tests\Unit\Entity
  * @since   1.5.0
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Tests\Unit\Entity;
+namespace ksfraser\Calendar\Tests\Unit\Entity;
 
 use DateTime;
-use Ksfraser\Calendar\Entity\CalendarAttachment;
+use ksfraser\Calendar\Entity\CalendarAttachment;
 use PHPUnit\Framework\TestCase;
 
 /**
- * @covers \Ksfraser\Calendar\Entity\CalendarAttachment
+ * @covers \ksfraser\Calendar\Entity\CalendarAttachment
  */
 class CalendarAttachmentTest extends TestCase
 {

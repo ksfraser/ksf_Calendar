@@ -8,15 +8,15 @@
  *
  * Maps to the fa_cal_notifications DB table.
  *
- * @package Ksfraser\Calendar\Entity
+ * @package ksfraser\Calendar\Entity
  * @since 1.5.0
  *
- * @UML Ksfraser\Calendar — CalendarNotification
+ * @UML ksfraser\Calendar — CalendarNotification
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Entity;
+namespace ksfraser\Calendar\Entity;
 
 use DateTime;
 use DateTimeInterface;

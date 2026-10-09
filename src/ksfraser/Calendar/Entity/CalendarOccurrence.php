@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Entity;
+namespace ksfraser\Calendar\Entity;
 
 use DateTime;
 use DateTimeInterface;

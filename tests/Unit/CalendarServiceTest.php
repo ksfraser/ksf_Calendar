@@ -12,27 +12,27 @@
  *
  * PHP 7.4+ compatible — no PHP 8+ syntax.
  *
- * @package Ksfraser\Calendar\Tests\Unit
+ * @package ksfraser\Calendar\Tests\Unit
  * @since   1.1.0
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Tests\Unit;
+namespace ksfraser\Calendar\Tests\Unit;
 
 use DateTime;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
-use Ksfraser\Calendar\Service\CalendarService;
-use Ksfraser\Calendar\Entity\CalendarEntry;
-use Ksfraser\Calendar\Entity\CalendarInvitee;
-use Ksfraser\Calendar\Contract\DatabaseAdapterInterface;
-use Ksfraser\Calendar\Exception\CalendarException;
+use ksfraser\Calendar\Service\CalendarService;
+use ksfraser\Calendar\Entity\CalendarEntry;
+use ksfraser\Calendar\Entity\CalendarInvitee;
+use ksfraser\Calendar\Contract\DatabaseAdapterInterface;
+use ksfraser\Calendar\Exception\CalendarException;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * @covers \Ksfraser\Calendar\Service\CalendarService
+ * @covers \ksfraser\Calendar\Service\CalendarService
  */
 class CalendarServiceTest extends TestCase
 {
@@ -1140,15 +1140,15 @@ class CalendarServiceTest extends TestCase
         $dep = $this->service->addDependency(
             10,
             20,
-            \Ksfraser\Calendar\Entity\CalendarDependency::DEPENDENCY_TYPE_FINISH_TO_START
+            \ksfraser\Calendar\Entity\CalendarDependency::DEPENDENCY_TYPE_FINISH_TO_START
         );
 
-        $this->assertInstanceOf(\Ksfraser\Calendar\Entity\CalendarDependency::class, $dep);
+        $this->assertInstanceOf(\ksfraser\Calendar\Entity\CalendarDependency::class, $dep);
         $this->assertSame(42,  $dep->getId());
         $this->assertSame(10,  $dep->getEntryId());
         $this->assertSame(20,  $dep->getDependsOnEntryId());
         $this->assertSame(
-            \Ksfraser\Calendar\Entity\CalendarDependency::DEPENDENCY_TYPE_FINISH_TO_START,
+            \ksfraser\Calendar\Entity\CalendarDependency::DEPENDENCY_TYPE_FINISH_TO_START,
             $dep->getDependencyType()
         );
 
@@ -1183,7 +1183,7 @@ class CalendarServiceTest extends TestCase
     public function testRemoveDependencyThrowsWhenNotFound(): void
     {
         $this->db->method('executeUpdate')->willReturn(0);
-        $this->expectException(\Ksfraser\Calendar\Exception\CalendarException::class);
+        $this->expectException(\ksfraser\Calendar\Exception\CalendarException::class);
         $this->service->removeDependency(999);
     }
 
@@ -1213,7 +1213,7 @@ class CalendarServiceTest extends TestCase
         $results = $this->service->getDependenciesForEntry(10);
 
         $this->assertCount(1, $results);
-        $this->assertInstanceOf(\Ksfraser\Calendar\Entity\CalendarDependency::class, $results[0]);
+        $this->assertInstanceOf(\ksfraser\Calendar\Entity\CalendarDependency::class, $results[0]);
         $this->assertSame(10, $results[0]->getEntryId());
         $this->assertSame(20, $results[0]->getDependsOnEntryId());
     }
@@ -1258,7 +1258,7 @@ class CalendarServiceTest extends TestCase
         $results = $this->service->getDependentsForEntry(10);
 
         $this->assertCount(1, $results);
-        $this->assertInstanceOf(\Ksfraser\Calendar\Entity\CalendarDependency::class, $results[0]);
+        $this->assertInstanceOf(\ksfraser\Calendar\Entity\CalendarDependency::class, $results[0]);
         $this->assertSame(30, $results[0]->getEntryId());
         $this->assertSame(10, $results[0]->getDependsOnEntryId());
     }
@@ -1302,7 +1302,7 @@ class CalendarServiceTest extends TestCase
         $results = $this->service->getChildEntries(10);
 
         $this->assertCount(1, $results);
-        $this->assertInstanceOf(\Ksfraser\Calendar\Entity\CalendarEntry::class, $results[0]);
+        $this->assertInstanceOf(\ksfraser\Calendar\Entity\CalendarEntry::class, $results[0]);
     }
 
     /**

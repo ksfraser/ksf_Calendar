@@ -4,12 +4,12 @@
  *
  * Represents a calendar source (Google, iCal, PM, CRM, HRM, Client Dates, etc.)
  *
- * @package Ksfraser\Calendar\Entity
+ * @package ksfraser\Calendar\Entity
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Entity;
+namespace ksfraser\Calendar\Entity;
 
 use DateTime;
 

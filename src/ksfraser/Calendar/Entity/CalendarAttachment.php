@@ -5,15 +5,15 @@
  * Represents a file attached to a calendar entry.
  * Maps to the fa_cal_attachments DB table.
  *
- * @package Ksfraser\Calendar\Entity
+ * @package ksfraser\Calendar\Entity
  * @since 1.5.0
  *
- * @UML Ksfraser\Calendar — CalendarAttachment
+ * @UML ksfraser\Calendar — CalendarAttachment
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Entity;
+namespace ksfraser\Calendar\Entity;
 
 use DateTime;
 use DateTimeInterface;

@@ -9,26 +9,26 @@
  *
  * PHP 7.4+ compatible — no PHP 8+ syntax.
  *
- * @package Ksfraser\Calendar\Tests\Unit
+ * @package ksfraser\Calendar\Tests\Unit
  * @since   1.5.0
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Tests\Unit;
+namespace ksfraser\Calendar\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
-use Ksfraser\Calendar\Service\CalendarService;
-use Ksfraser\Calendar\Entity\CalendarAttachment;
-use Ksfraser\Calendar\Entity\CalendarNotification;
-use Ksfraser\Calendar\Contract\DatabaseAdapterInterface;
-use Ksfraser\Calendar\Exception\CalendarException;
+use ksfraser\Calendar\Service\CalendarService;
+use ksfraser\Calendar\Entity\CalendarAttachment;
+use ksfraser\Calendar\Entity\CalendarNotification;
+use ksfraser\Calendar\Contract\DatabaseAdapterInterface;
+use ksfraser\Calendar\Exception\CalendarException;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * @covers \Ksfraser\Calendar\Service\CalendarService
+ * @covers \ksfraser\Calendar\Service\CalendarService
  */
 class CalendarServiceAttachmentNotificationTest extends TestCase
 {

@@ -11,7 +11,7 @@
  *   - Provide extendedProps for every field that the JavaScript detail panel
  *     or edit modal may read without an additional AJAX round-trip.
  *
- * @package Ksfraser\Calendar\DTO
+ * @package ksfraser\Calendar\DTO
  * @since   1.0.0
  *
  * @UML class CalendarEntryDTO
@@ -23,11 +23,11 @@
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\DTO;
+namespace ksfraser\Calendar\DTO;
 
 use DateTime;
-use Ksfraser\Calendar\Entity\CalendarEntry;
-use Ksfraser\Calendar\Entity\CalendarOccurrence;
+use ksfraser\Calendar\Entity\CalendarEntry;
+use ksfraser\Calendar\Entity\CalendarOccurrence;
 
 class CalendarEntryDTO
 {

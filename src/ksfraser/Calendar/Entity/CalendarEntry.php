@@ -4,16 +4,16 @@
  *
  * Core entity representing any calendar entry (event, task, activity, etc.)
  *
- * @package Ksfraser\Calendar\Entity
+ * @package ksfraser\Calendar\Entity
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Entity;
+namespace ksfraser\Calendar\Entity;
 
 use DateTime;
 use DateTimeInterface;
-use Ksfraser\Calendar\Entity\CalendarInvitee;
+use ksfraser\Calendar\Entity\CalendarInvitee;
 
 class CalendarEntry
 {

@@ -2,18 +2,18 @@
 /**
  * CalendarEntry Events Test
  *
- * @package Ksfraser\Calendar\Tests\Unit\Event
+ * @package ksfraser\Calendar\Tests\Unit\Event
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Tests\Unit\Event;
+namespace ksfraser\Calendar\Tests\Unit\Event;
 
 use DateTime;
-use Ksfraser\Calendar\Entity\CalendarEntry;
-use Ksfraser\Calendar\Event\CalendarEntryCreatedEvent;
-use Ksfraser\Calendar\Event\CalendarEntryDeletedEvent;
-use Ksfraser\Calendar\Event\CalendarEntryUpdatedEvent;
+use ksfraser\Calendar\Entity\CalendarEntry;
+use ksfraser\Calendar\Event\CalendarEntryCreatedEvent;
+use ksfraser\Calendar\Event\CalendarEntryDeletedEvent;
+use ksfraser\Calendar\Event\CalendarEntryUpdatedEvent;
 use PHPUnit\Framework\TestCase;
 
 class CalendarEntryEventsTest extends TestCase

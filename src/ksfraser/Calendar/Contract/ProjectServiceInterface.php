@@ -2,12 +2,12 @@
 /**
  * ProjectServiceInterface for Calendar integration
  *
- * @package Ksfraser\Calendar\Contract
+ * @package ksfraser\Calendar\Contract
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Contract;
+namespace ksfraser\Calendar\Contract;
 
 interface ProjectServiceInterface
 {

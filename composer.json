@@ -42,15 +42,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Ksfraser\\": "src/Ksfraser/"
-        },
-        "classmap": [
-            "src/Ksfraser/Calendar/Event/CalendarEntryEvents.php"
-        ]
+            "ksfraser\\": "src/ksfraser/"
+        }
     },
     "autoload-dev": {
         "psr-4": {
-            "Ksfraser\\Tests\\": "tests/"
+            "ksfraser\\Tests\\": "tests/"
         }
     },
     "scripts": {

@@ -10,7 +10,7 @@
  *   - direction, meeting_number, meeting_passcode in extendedProps
  *   - online_url and phone_number already present (regression guard)
  *
- * @package Ksfraser\Calendar\Tests\Unit\DTO
+ * @package ksfraser\Calendar\Tests\Unit\DTO
  * @since   1.3.0
  *
  * @UML     class CalendarEntryDTO
@@ -18,14 +18,14 @@
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Tests\Unit\DTO;
+namespace ksfraser\Calendar\Tests\Unit\DTO;
 
 use PHPUnit\Framework\TestCase;
-use Ksfraser\Calendar\DTO\CalendarEntryDTO;
-use Ksfraser\Calendar\Entity\CalendarEntry;
+use ksfraser\Calendar\DTO\CalendarEntryDTO;
+use ksfraser\Calendar\Entity\CalendarEntry;
 
 /**
- * @covers \Ksfraser\Calendar\DTO\CalendarEntryDTO
+ * @covers \ksfraser\Calendar\DTO\CalendarEntryDTO
  */
 class CalendarEntryDTOTest extends TestCase
 {

@@ -34,7 +34,7 @@ CRM / HRM / ProjectManagement are the intended **app hosts** (roadmap §7).
 |--------------------------|------------------------------------------|--------------------------------------------------|----------------------------------------------------|
 | Shared plugin layer      | `ksf_FA_Common` (`ksfraser/ksf-fa-common`) | `ksfraser\FrontAccounting\Common\Plugin`      | `PluginRegistry`, `AbstractPlugin`, `PluginInterface` (generic discover/register/activate) |
 | Tab base classes         | `FA_ProductAttributes_Core` (`ksfraser/fa-product-attributes-core`) | `FrontAccounting\ProductAttributes\Plugin` | `AbstractTab`, `ProductAttributeTabInterface`, `TabRegistry` — the tab contract |
-| Generic traits           | `Traits` (`ksfraser/traits`)                | `Ksfraser\Traits`                                | `InlineTabRendererTrait`, `InlinePostActionsTrait` — render + POST flow |
+| Generic traits           | `Traits` (`ksfraser/traits`)                | `ksfraser\Traits`                                | `InlineTabRendererTrait`, `InlinePostActionsTrait` — render + POST flow |
 | Exemplar host adapter    | `FA_ProductAttributes` (`ksfraser/fa-product-attributes`) | `FrontAccounting\ProductAttributes\Hooks`  | wires the tab plugins onto `items.php` via `item_display_tab_*` |
 | App hosts (roadmap)      | `ksf_FA_CRM`, `ksf_FA_HRM`, `ksf_FA_ProjectManagement` | `FrontAccounting\...\Application` (`extends application`) | `install_tabs()` + `add_application()`; future `display_tab_*` hosts |
 
@@ -57,9 +57,9 @@ CRM / HRM / ProjectManagement are the intended **app hosts** (roadmap §7).
 | Prefix                          | Autoload source                    | Maps to                       |
 |---------------------------------|------------------------------------|-------------------------------|
 | `ksfraser\FrontAccounting\Common\`            | ksf_FA_Common composer psr-4  | `src/`                        |
-| `Ksfraser\Frontaccounting\HTML\`              | ksf_FA_Common composer psr-4  | `src/HTML/`                   |
+| `ksfraser\Frontaccounting\HTML\`              | ksf_FA_Common composer psr-4  | `src/HTML/`                   |
 | `FrontAccounting\ProductAttributes\`          | product-attributes-core psr-4 | `src/FrontAccounting/ProductAttributes/` |
-| `Ksfraser\Traits\`                            | traits psr-4                   | `src/Ksfraser/Traits/`        |
+| `ksfraser\Traits\`                            | traits psr-4                   | `src/ksfraser/Traits/`        |
 | `KsfCommon\*` (legacy)             | **NOT autoloaded**            | aliased by `ksf_FA_Common/src/compat.php` |
 
 **Gotcha — `KsfCommon\Plugin\*` is a legacy alias, not a real autoloaded
@@ -93,7 +93,7 @@ New code should import `ksfraser\FrontAccounting\Common\Plugin\*` directly.
 
 ## 5. Traits — where the shared logic lives
 
-### `Ksfraser\Traits` (package `ksfraser/traits`)
+### `ksfraser\Traits` (package `ksfraser/traits`)
 
 - **`InlineTabRendererTrait`** (since 1.4.0) — shared render flow. The using class
   MUST declare `$tabClassName` (FQCN of the UI renderer); the trait manages `$tab`.
@@ -197,7 +197,7 @@ enforced by the regression test `testRenderDoesNotContainFormTag`.
 
 **Working approach (option A, adopted):** stay inside the host form and drive
 tab action buttons through FA's `ajaxsubmit`/`JsHttpRequest` path — the reusable
-SRP renderers `Ksfraser\Frontaccounting\HTML\MasterSummaryTable`,
+SRP renderers `ksfraser\Frontaccounting\HTML\MasterSummaryTable`,
 `FormFooter`, `TabContext` already emit `ajaxsubmit` submit buttons
 + `formnovalidate` + hidden `record_id` / `_tabs_sel`. No nested form, no broken
 native submit. `handlePostActions()` reads `$_POST['_tabs_sel']` (the host form

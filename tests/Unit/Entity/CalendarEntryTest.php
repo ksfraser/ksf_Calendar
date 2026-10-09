@@ -2,16 +2,16 @@
 /**
  * CalendarEntry Entity Test
  *
- * @package Ksfraser\Calendar\Tests\Unit\Entity
+ * @package ksfraser\Calendar\Tests\Unit\Entity
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Tests\Unit\Entity;
+namespace ksfraser\Calendar\Tests\Unit\Entity;
 
 use DateTime;
-use Ksfraser\Calendar\Entity\CalendarEntry;
-use Ksfraser\Calendar\Entity\CalendarInvitee;
+use ksfraser\Calendar\Entity\CalendarEntry;
+use ksfraser\Calendar\Entity\CalendarInvitee;
 use PHPUnit\Framework\TestCase;
 
 class CalendarEntryTest extends TestCase

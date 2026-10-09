@@ -109,3 +109,51 @@ All development is done in the **devel tree** (`~/Documents/ksf_Calendar`). Do *
 |------|---------|
 | `~/Documents/ksf_Calendar` | Devel tree — all development, testing, commits |
 | `~/ksf_Infrastructure/fa_modules/ksf_Calendar` | UAT bind point — deployment target, integration testing (if mirrored) |
+
+## Why `require php` is `>=7.4` and must NOT be lowered to 7.3
+
+The shared guidance says PHP 7.3 is the cross-module compatibility floor. **This
+module is not on 7.3, deliberately.**
+
+`src/` contains **84 typed properties** (`private ?int $id;` and friends), which
+is PHP 7.4+ syntax and a **parse error** on 7.3. Declaring `>=7.3` would be a
+false promise: the module would fatal on 7.3 at parse time, before any
+autoloader ran.
+
+The runtime this module actually targets is the FA container, which is
+**PHP 7.4.33**:
+
+    podman exec ksfii_app-fa php -v   ->  PHP 7.4.33
+
+So:
+
+| Field | Value | Why |
+|---|---|---|
+| `require.php` | `>=7.4` | 7.4 syntax in src/ |
+| `config.platform.php` | `7.4.33` | what the container actually runs |
+
+`config.platform` must stay pinned. The host runs PHP 8.1, so without the pin the
+lock resolves for the wrong PHP and the module breaks on the container — the
+failure mode described in `ksf_Infrastructure/AGENTS_APPENDIX.md`.
+`tests/Unit/SourceTreeTest::testPhpFloorIsHonestAndPlatformPinMatchesTheContainer`
+guards both values, so a well-meaning "fix" to 7.3 now fails the build instead of
+the container.
+
+If 7.3 is ever genuinely required, that is a refactor of all 84 properties — not a
+one-line version change.
+
+## Source-tree guards
+
+`tools/check_autoload.php` reports any class under `src/` that PSR-4 cannot
+reach, or whose dependencies do not resolve. It exists because a green test suite
+does **not** prove the tree is sound: a file nothing references is never loaded by
+the tests and fatals the first time something tries.
+
+It found `legacy/iCalService.php.unloadable`, a 371-line service written against
+eluceo/ical **1.x** (`PropertyFactory\FactoryTrait`, removed in 2.x — the
+installed version is 2.14.0) plus a second iCal library, `craigk5n/icalendar`,
+that is in neither `composer.json` nor `composer.lock`. A missing trait is a
+compile-time fatal, not a catchable error, so it could only be found statically.
+
+`tests/Unit/SourceTreeTest` wraps that plus the PSR-4 and namespace rules. Each
+guard has been verified to fail on an injected regression.

@@ -2,12 +2,12 @@
 /**
  * CalendarException
  *
- * @package Ksfraser\Calendar\Exception
+ * @package ksfraser\Calendar\Exception
  */
 
 declare(strict_types=1);
 
-namespace Ksfraser\Calendar\Exception;
+namespace ksfraser\Calendar\Exception;
 
 use Ksfraser\Exceptions\Calendar\CalendarException as BaseCalendarException;
 
