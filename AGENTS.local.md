@@ -157,3 +157,39 @@ compile-time fatal, not a catchable error, so it could only be found statically.
 
 `tests/Unit/SourceTreeTest` wraps that plus the PSR-4 and namespace rules. Each
 guard has been verified to fail on an injected regression.
+
+## DEPLOY TRAP: a namespace rename silently breaks the container
+
+`vendor/` is excluded from the `fa_modules` rsync, which is correct — you do not
+want to push a whole vendor tree. But **`vendor/composer/autoload_*.php` is
+generated from `composer.json`, and it is part of `vendor/`**.
+
+So renaming a namespace and moving its directory silently leaves the deployed tree
+with an autoloader that still points at the old path:
+
+    deployed vendor/composer/autoload_psr4.php
+      'Ksfraser\\' => array($baseDir . '/src/Ksfraser')      <- stale
+
+In the container that produced **no output at all**, not an error:
+
+    class_exists('ksfraser\Calendar\Entity\CalendarEntry')  ->  false
+    class_exists('Eluceo\iCal\Domain\Entity\Event')          ->  true
+
+The host was green (the host's own `vendor` had been regenerated), and the vendor
+classes still worked — so the only symptom was a customer-facing feature silently
+producing nothing.
+
+**After any namespace or PSR-4 change, regenerate the autoloader in the DEPLOYED
+tree, not just the source repo:**
+
+    cd ksf_Infrastructure/fa_modules/ksf_Calendar && composer dump-autoload
+
+Then verify from inside the container that a module class actually loads:
+
+    podman exec ksfii_app-fa php -r \
+      'require "/var/www/html/modules/ksf_Calendar/vendor/autoload.php";
+       var_dump(class_exists("ksfraser\\Calendar\\Service\\ICalService"));'
+
+This is the same family of problem as the stale single-file binds recorded in
+`ksf_Infrastructure/AGENTS_APPENDIX.md`: the deploy looks correct, `inspect` and
+the file paths all agree, and only behaviour inside the container reveals it.
