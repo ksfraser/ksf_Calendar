@@ -7,7 +7,7 @@ namespace Ksfraser\Tests\Unit\Calendar;
 use PHPUnit\Framework\TestCase;
 
 /**
- * syncCRMActivities() read `TB_PREF . "fa_crm_communications"`. The CRM
+ * syncCRMActivities() read the legacy fa_crm_communications table. The CRM
  * module's table is 0_ksf_crm_communications - no table with an fa_ second
  * segment exists anywhere - so the query failed with MySQL error 1146 and no
  * CRM activity was ever synced into the calendar.
