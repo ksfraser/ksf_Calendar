@@ -56,16 +56,67 @@ class CalendarService
     private $projectService;
     private $notificationPublisher = null;
 
+    /**
+     * The shared contact resolver, when one has been supplied.
+     *
+     * @var \ksfraser\FrontAccounting\Common\ContactResolver\Contract\ContactResolverInterface|null
+     */
+    private $contactResolver = null;
+
     public function __construct(
         DatabaseAdapterInterface $db,
         EventDispatcherInterface $events,
         LoggerInterface $logger,
-        ProjectServiceInterface $projectService = null
+        ProjectServiceInterface $projectService = null,
+        $contactResolver = null
     ) {
         $this->db = $db;
         $this->events = $events;
         $this->logger = $logger;
         $this->projectService = $projectService;
+        $this->contactResolver = $contactResolver;
+    }
+
+    /**
+     * Supply the shared contact resolver.
+     *
+     * The resolver is how a module reaches FA core's contact registry
+     * (0_crm_persons / 0_crm_contacts) without writing SQL against an FA
+     * core table.
+     *
+     * @param \ksfraser\FrontAccounting\Common\ContactResolver\Contract\ContactResolverInterface|null $resolver The resolver
+     * @return self
+     */
+    public function setContactResolver($resolver = null): self
+    {
+        $this->contactResolver = $resolver;
+
+        return $this;
+    }
+
+    /**
+     * The contact resolver to use.
+     *
+     * The injected one when there is one; otherwise the shared front door
+     * from ksf-fa-common, which dispatches the ksf_contact_resolve hook and
+     * falls back to FA's own contact functions.
+     *
+     * @return \ksfraser\FrontAccounting\Common\ContactResolver\Contract\ContactResolverInterface|null
+     */
+    private function contactResolver()
+    {
+        if ($this->contactResolver !== null) {
+            return $this->contactResolver;
+        }
+
+        $class = 'ksfraser\\FrontAccounting\\Common\\ContactResolver\\ContactResolver';
+        if (!class_exists($class)) {
+            return null;
+        }
+
+        $this->contactResolver = new $class();
+
+        return $this->contactResolver;
     }
 
     /**
@@ -1408,27 +1459,32 @@ class CalendarService
             }
         }
 
-        // CRM contacts fallback (optional; silently skipped if module not installed).
+        // CRM contacts fallback.
+        //
+        // A CRM contact is a person in FA core's contact registry
+        // (0_crm_persons) and the relation that links the person to an
+        // entity (0_crm_contacts). There is no CRM-owned contact table - the
+        // estate has exactly ONE contact registry and it is FA core's - so the
+        // lookup goes through the shared contact resolver rather than a
+        // query against a table of the CRM's own.
         if (empty($results) || (empty($contactTypes) || in_array(CalendarInvitee::TYPE_CRM_CONTACT, $contactTypes))) {
             try {
-                $crmRows = $this->db->fetchAll(
-                    "SELECT id, CONCAT(first_name, ' ', last_name) AS name, email, phone"
-                    . " FROM fa_crm_contacts"
-                    . " WHERE inactive = 0"
-                    . " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?)"
-                    . " LIMIT ?",
-                    [$like, $like, $like, $like, $limit]
-                );
-
-                foreach ($crmRows as $row) {
-                    $results[] = [
-                        'contact_type' => CalendarInvitee::TYPE_CRM_CONTACT,
-                        'contact_id'   => (string) ($row['id'] ?? ''),
-                        'name'         => (string) ($row['name'] ?? ''),
-                        'email'        => (string) ($row['email'] ?? ''),
-                        'phone'        => (string) ($row['phone'] ?? ''),
-                        'type_label'   => 'CRM Contact',
-                    ];
+                $resolver = $this->contactResolver();
+                if ($resolver !== null) {
+                    foreach ($resolver->search($query, $limit) as $contact) {
+                        $contactId = $contact->getContactId();
+                        if ($contactId === null) {
+                            continue;
+                        }
+                        $results[] = [
+                            'contact_type' => CalendarInvitee::TYPE_CRM_CONTACT,
+                            'contact_id'   => (string) $contactId,
+                            'name'         => trim($contact->getName() . ' ' . $contact->getName2()),
+                            'email'        => (string) $contact->getEmail(),
+                            'phone'        => (string) $contact->getPhone(),
+                            'type_label'   => 'CRM Contact',
+                        ];
+                    }
                 }
             } catch (\Exception $e) {
                 $this->logger->debug('CRM contacts fallback search skipped', ['reason' => $e->getMessage()]);
