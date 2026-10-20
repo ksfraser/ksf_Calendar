@@ -732,9 +732,13 @@ class CalendarService
     {
         $count = 0;
 
-        $sql = "SELECT * FROM " . TB_PREF . "fa_crm_communications
-                WHERE assigned_to = ? AND inactive = 0
-                AND created_at >= DATE_SUB(NOW(), INTERVAL 1 YEAR)";
+        // A CRM communication is a CRM-domain record: it lives in the CRM
+        // module's own table (0_ksf_crm_communications), not in a table of
+        // this module's own and not in an FA core table. The `inactive`
+        // column does not exist on that table - the CRM's status column is
+        // `status` - so filtering on it raised "Unknown column".
+        $sql = "SELECT * FROM " . TB_PREF . "ksf_crm_communications
+                WHERE assigned_to = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 1 YEAR)";
 
         $rows = $this->db->fetchAll($sql, [$userId]);
 
