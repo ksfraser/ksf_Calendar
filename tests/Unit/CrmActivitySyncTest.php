@@ -8,9 +8,9 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * syncCRMActivities() read `TB_PREF . "fa_crm_communications"`. The CRM
- * module's table is 0_ksf_crm_communications - there is no 0_fa_crm_*
- * table anywhere - so the query failed with MySQL error 1146 and no CRM
- * activity was ever synced into the calendar.
+ * module's table is 0_ksf_crm_communications - no table with an fa_ second
+ * segment exists anywhere - so the query failed with MySQL error 1146 and no
+ * CRM activity was ever synced into the calendar.
  *
  * The query also filtered on `inactive`, a column the CRM's communications
  * table does not have (its status column is `status`), which would have
@@ -35,9 +35,9 @@ class CrmActivitySyncTest extends TestCase
         );
 
         $this->assertStringNotContainsString(
-            'TB_PREF . "fa_crm_communications',
+            'fa_crm_communications',
             $contents,
-            'the CRM activity sync must not address 0_fa_crm_communications: that table is created by no schema'
+            'the CRM activity sync must not address the fa_crm_communications table: no schema creates it'
         );
     }
 

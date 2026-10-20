@@ -261,9 +261,9 @@ namespace Ksfraser\Calendar\Service;
 
 class CalendarService
 {
-    private const TABLE_ENTRIES  = 'fa_cal_entries';
-    private const TABLE_SOURCES  = 'fa_cal_sources';
-    private const TABLE_INVITEES = 'fa_cal_invitees';
+    private const TABLE_ENTRIES  = 'ksf_calendar_entries';
+    private const TABLE_SOURCES  = 'ksf_calendar_sources';
+    private const TABLE_INVITEES = 'ksf_calendar_invitees';
 
     public const DEFAULT_DURATION_MINUTES = 15;
 
@@ -477,7 +477,7 @@ interface ProjectServiceInterface
 [POST add_invitee {entry_id, contact_type, contact_id, name, email}]
        |
        v
-[INSERT into fa_cal_invitees]
+[INSERT into ksf_calendar_invitees]
        |
        v
 [Resources auto-accept if available; people default to pending]
@@ -507,9 +507,9 @@ interface ProjectServiceInterface
 
 ## 5. Database Schema
 
-### 5.1 fa_cal_entries Table
+### 5.1 ksf_calendar_entries Table
 ```sql
-CREATE TABLE fa_cal_entries (
+CREATE TABLE ksf_calendar_entries (
     id INT AUTO_INCREMENT PRIMARY KEY,
     source VARCHAR(20) NOT NULL,
     source_id VARCHAR(100) NOT NULL,
@@ -526,7 +526,7 @@ CREATE TABLE fa_cal_entries (
     customer_id VARCHAR(50),
     project_id VARCHAR(50),
     task_id VARCHAR(50),
-    contact_id INT(11) NULL DEFAULT NULL COMMENT 'FK to fa_cal_invitees.contact_id for backward compat; primary resolution via crm_contacts.id',
+    contact_id INT(11) NULL DEFAULT NULL COMMENT 'FK to ksf_calendar_invitees.contact_id for backward compat; primary resolution via crm_contacts.id',
     status VARCHAR(20) DEFAULT 'pending',
     priority VARCHAR(20) DEFAULT 'medium',
     category VARCHAR(50),
@@ -548,9 +548,9 @@ CREATE TABLE fa_cal_entries (
 );
 ```
 
-### 5.2 fa_cal_sources Table
+### 5.2 ksf_calendar_sources Table
 ```sql
-CREATE TABLE fa_cal_sources (
+CREATE TABLE ksf_calendar_sources (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     type VARCHAR(20) NOT NULL,
@@ -578,11 +578,11 @@ CREATE TABLE fa_cal_sources (
 );
 ```
 
-### 5.3 fa_cal_invitees Table (v1.3.0)
+### 5.3 ksf_calendar_invitees Table (v1.3.0)
 ```sql
-CREATE TABLE fa_cal_invitees (
+CREATE TABLE ksf_calendar_invitees (
     id INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    entry_id INT(11) NOT NULL COMMENT 'FK to fa_cal_entries.id',
+    entry_id INT(11) NOT NULL COMMENT 'FK to ksf_calendar_entries.id',
     contact_type VARCHAR(20) NOT NULL DEFAULT 'ad_hoc'
         COMMENT 'user | crm_contact | resource | ad_hoc (matches crm_categories.type)',
     contact_id INT(11) NULL DEFAULT NULL COMMENT 'FK to crm_contacts.id for person-registry types; entity ID for ad_hoc/resources',
@@ -605,11 +605,11 @@ CREATE TABLE fa_cal_invitees (
 ### 5.4 Person Registry Tables (FA core, referenced by invitees)
 
 The FA `0_crm_persons` and `0_crm_contacts` tables form the canonical person
-registry. `fa_cal_invitees.contact_id` is an FK to `0_crm_contacts.id`.
+registry. `ksf_calendar_invitees.contact_id` is an FK to `0_crm_contacts.id`.
 Resolution of invitees for visibility checks uses the person_id chain:
 
 ```
-fa_cal_invitees.contact_id → 0_crm_contacts.id
+ksf_calendar_invitees.contact_id → 0_crm_contacts.id
                                 → person_id → 0_crm_persons.id
                                                 → other 0_crm_contacts rows (e.g. type='user')
 ```

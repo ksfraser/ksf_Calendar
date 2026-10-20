@@ -103,8 +103,8 @@ Represents a person invited to a calendar entry:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| id | int | Primary key (fa_cal_invitees.id) |
-| entry_id | int | FK to fa_cal_entries.id |
+| id | int | Primary key (ksf_calendar_invitees.id) |
+| entry_id | int | FK to ksf_calendar_entries.id |
 | contact_id | int | FK to 0_crm_contacts.id (person registry) |
 | contact_type | string | 'fa_user', 'crm_contact', 'hrm_employee', 'resource' |
 | response_status | string | 'pending', 'accepted', 'declined', 'tentative' |
@@ -128,7 +128,7 @@ Each FA module seeds its own crm_categories row on install (ksf_FA_RBAC seeds 'u
 Invitees are resolved through the FA person registry:
 
 ```
-fa_cal_invitees.contact_id → 0_crm_contacts.id
+ksf_calendar_invitees.contact_id → 0_crm_contacts.id
 0_crm_contacts.entity_id → 0_crm_persons.id
 0_crm_contacts.type → 0_crm_categories.type
 ```
@@ -143,10 +143,10 @@ Every FA user MUST have a person registry entry (crm_persons + crm_contacts with
 
 ### 5. Database Schema (fa_cal_ prefix)
 
-Tables: fa_cal_entries, fa_cal_invitees
+Tables: ksf_calendar_entries, ksf_calendar_invitees
 
 ```sql
-CREATE TABLE fa_cal_invitees (
+CREATE TABLE ksf_calendar_invitees (
     id              INT(11) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     entry_id        INT(11) UNSIGNED NOT NULL,
     contact_id      INT(11) DEFAULT NULL,
@@ -156,7 +156,7 @@ CREATE TABLE fa_cal_invitees (
     updated_at      DATETIME DEFAULT NULL,
     INDEX idx_entry (entry_id),
     INDEX idx_contact (contact_id, contact_type),
-    CONSTRAINT fk_invitee_entry FOREIGN KEY (entry_id) REFERENCES fa_cal_entries(id) ON DELETE CASCADE
+    CONSTRAINT fk_invitee_entry FOREIGN KEY (entry_id) REFERENCES ksf_calendar_entries(id) ON DELETE CASCADE
 );
 ```
 
@@ -236,17 +236,17 @@ Calendar entries are filtered by invitee status using the `viewable_by` paramete
 -- Two-legged JOIN through person registry:
 
 -- Leg 1: FA user direct match (when viewer is an FA user)
-SELECT e.* FROM fa_cal_entries e
-JOIN fa_cal_invitees i ON i.entry_id = e.id
+SELECT e.* FROM ksf_calendar_entries e
+JOIN ksf_calendar_invitees i ON i.entry_id = e.id
 WHERE i.contact_id = :viewerContactId
   AND i.contact_type = 'fa_user'
 
 UNION
 
 -- Leg 2: All other contact types via crm_contacts EXISTS
-SELECT e.* FROM fa_cal_entries e
+SELECT e.* FROM ksf_calendar_entries e
 WHERE EXISTS (
-    SELECT 1 FROM fa_cal_invitees i
+    SELECT 1 FROM ksf_calendar_invitees i
     JOIN 0_crm_contacts c ON c.id = i.contact_id
     WHERE i.entry_id = e.id
       AND c.entity_id = :viewerPersonId

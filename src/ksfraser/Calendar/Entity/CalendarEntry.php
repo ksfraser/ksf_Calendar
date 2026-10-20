@@ -150,7 +150,7 @@ class CalendarEntry
     private bool $isScheduled;
 
     /**
-     * FK to fa_cal_entries.id — links recurring instances, reminders, or follow-ups to a parent.
+     * FK to ksf_calendar_entries.id — links recurring instances, reminders, or follow-ups to a parent.
      *
      * @var int|null
      * @since 1.4.0
@@ -771,7 +771,7 @@ class CalendarEntry
     }
 
     /**
-     * Get the parent entry ID (FK to fa_cal_entries.id).
+     * Get the parent entry ID (FK to ksf_calendar_entries.id).
      *
      * @return int|null
      * @since 1.4.0

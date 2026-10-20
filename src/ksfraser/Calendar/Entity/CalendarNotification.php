@@ -6,7 +6,7 @@
  * May apply to the entire entry (invitee_id = NULL) or to a specific invitee
  * as a per-invitee override.
  *
- * Maps to the fa_cal_notifications DB table.
+ * Maps to the ksf_calendar_notifications DB table.
  *
  * @package ksfraser\Calendar\Entity
  * @since 1.5.0
@@ -32,11 +32,11 @@ class CalendarNotification
     /** @var int|null DB auto-increment PK */
     private ?int $id;
 
-    /** @var int FK to fa_cal_entries.id */
+    /** @var int FK to ksf_calendar_entries.id */
     private int $entryId;
 
     /**
-     * FK to fa_cal_invitees.id.
+     * FK to ksf_calendar_invitees.id.
      * NULL = entry-level notification (applies to all invitees).
      *
      * @var int|null
@@ -67,7 +67,7 @@ class CalendarNotification
     private DateTime $createdAt;
 
     /**
-     * @param int    $entryId          FK to fa_cal_entries.id
+     * @param int    $entryId          FK to ksf_calendar_entries.id
      * @param string $notificationType One of the TYPE_* constants
      * @param int    $minutesBefore    Minutes before start_date to fire
      *

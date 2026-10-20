@@ -34,7 +34,7 @@ class ContactSearchTest extends TestCase
         $this->assertStringNotContainsString(
             'fa_crm_contacts',
             $contents,
-            'the search must not address 0_fa_crm_contacts: that table is created by no schema'
+            'the search must not address the fa_crm_contacts table: no schema creates it'
         );
     }
 

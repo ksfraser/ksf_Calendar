@@ -2,7 +2,7 @@
 /**
  * CalendarInvitee Entity
  *
- * Represents a single attendee row in fa_cal_invitees.
+ * Represents a single attendee row in ksf_calendar_invitees.
  * Covers three kinds of participant with a single class:
  *
  *   - Person invitee  (contact_type = user | crm_contact | ad_hoc, is_resource = false)
@@ -12,7 +12,7 @@
  * CalendarService is responsible for setting that before persisting.
  *
  * contact_id stores 0_crm_contacts.id (INT) for person types (user, crm_contact)
- * and fa_resources.id (INT) for resource type; NULL for ad_hoc.
+ * and resources.id (INT) for resource type; NULL for ad_hoc.
  *
  * @package ksfraser\Calendar\Entity
  * @since   1.1.0
@@ -59,7 +59,7 @@ class CalendarInvitee
     /** @var int|null DB primary key; null before first save. */
     private $id;
 
-    /** @var int  FK to fa_cal_entries.id */
+    /** @var int  FK to ksf_calendar_entries.id */
     private $entryId;
 
     /**
@@ -74,7 +74,7 @@ class CalendarInvitee
      * Foreign key into the relevant system table via 0_crm_contacts.id:
      *   - user        -> 0_crm_contacts.id (type='user', entity_id = 0_users.id)
      *   - crm_contact -> 0_crm_contacts.id (type='crm_contact')
-     *   - resource    -> fa_resources.id  (ksf_FA_Resources)
+     *   - resource    -> resources.id  (ksf_FA_Resources)
      *   - ad_hoc      -> NULL
      *
      * @var string|null

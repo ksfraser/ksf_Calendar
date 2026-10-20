@@ -135,7 +135,7 @@ class CalendarEntryDTO
      */
     private $isScheduled;
     /**
-     * FK to parent fa_cal_entries.id (recurring instances, reminders, follow-ups).
+     * FK to parent ksf_calendar_entries.id (recurring instances, reminders, follow-ups).
      *
      * @var int|null
      * @since 1.4.0

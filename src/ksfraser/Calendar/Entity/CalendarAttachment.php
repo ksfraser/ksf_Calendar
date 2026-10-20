@@ -3,7 +3,7 @@
  * CalendarAttachment Entity
  *
  * Represents a file attached to a calendar entry.
- * Maps to the fa_cal_attachments DB table.
+ * Maps to the ksf_calendar_attachments DB table.
  *
  * @package ksfraser\Calendar\Entity
  * @since 1.5.0
@@ -23,7 +23,7 @@ class CalendarAttachment
     /** @var int|null DB auto-increment PK */
     private ?int $id;
 
-    /** @var int FK to fa_cal_entries.id */
+    /** @var int FK to ksf_calendar_entries.id */
     private int $entryId;
 
     /** @var string Original filename */
@@ -48,7 +48,7 @@ class CalendarAttachment
     private bool $inactive;
 
     /**
-     * @param int    $entryId  FK to fa_cal_entries.id
+     * @param int    $entryId  FK to ksf_calendar_entries.id
      * @param string $filename Original filename
      * @param string $filePath Server file path or URL
      *

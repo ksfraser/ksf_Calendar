@@ -3,7 +3,7 @@
  * CalendarDependency Entity
  *
  * Represents a dependency relationship between two calendar entries.
- * Maps to the fa_cal_dependencies DB table.
+ * Maps to the ksf_calendar_dependencies DB table.
  *
  * @package ksfraser\Calendar\Entity
  * @UML ksfraser\Calendar — CalendarDependency

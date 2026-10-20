@@ -206,7 +206,7 @@ class CalendarServiceTest extends TestCase
                 if (strpos($sql, 'crm_persons') !== false) {
                     return [];
                 }
-                if (strpos($sql, 'fa_resources') !== false) {
+                if (strpos($sql, 'resources') !== false) {
                     return [['id' => '2', 'name' => 'Projector', 'email' => '', 'phone' => '']];
                 }
                 return [];
@@ -258,7 +258,7 @@ class CalendarServiceTest extends TestCase
         $this->db->method('fetchAssoc')
             ->willReturnCallback(function (string $sql) use (&$callCount) {
                 $callCount++;
-                if (strpos($sql, 'SELECT *') !== false && strpos($sql, 'fa_cal_entries') !== false) {
+                if (strpos($sql, 'SELECT *') !== false && strpos($sql, 'ksf_calendar_entries') !== false) {
                     return $this->makeEntryRow();
                 }
                 // isResourceAvailable — entry time window
@@ -777,7 +777,7 @@ class CalendarServiceTest extends TestCase
 
     /**
      * When viewable_by is set, the SQL must:
-     *  - join fa_cal_invitees → crm_contacts (invitee hat) → crm_contacts (user hat)
+     *  - join ksf_calendar_invitees → crm_contacts (invitee hat) → crm_contacts (user hat)
      *  - restrict the user hat by uc.type = 'user' and uc.entity_id = ?
      *  - still include the assigned_to = ? direct ownership check
      *
@@ -849,7 +849,7 @@ class CalendarServiceTest extends TestCase
         );
 
         $this->assertNotNull($capturedSql);
-        $this->assertStringNotContainsString('fa_cal_invitees', $capturedSql);
+        $this->assertStringNotContainsString('ksf_calendar_invitees', $capturedSql);
     }
 
     /**
@@ -873,7 +873,7 @@ class CalendarServiceTest extends TestCase
         );
 
         $this->assertNotNull($capturedSql);
-        $this->assertStringNotContainsString('fa_cal_invitees', $capturedSql);
+        $this->assertStringNotContainsString('ksf_calendar_invitees', $capturedSql);
     }
 
     // =========================================================================
@@ -897,7 +897,7 @@ class CalendarServiceTest extends TestCase
             ->method('fetchAll')
             ->willReturnCallback(
                 function (string $sql, array $params) use (&$capturedSql, &$capturedParams) {
-                    if (strpos($sql, 'fa_cal_invitees') !== false) {
+                    if (strpos($sql, 'ksf_calendar_invitees') !== false) {
                         $capturedSql    = $sql;
                         $capturedParams = $params;
                     }
@@ -1153,7 +1153,7 @@ class CalendarServiceTest extends TestCase
         );
 
         $this->assertNotNull($capturedSql);
-        $this->assertStringContainsString('fa_cal_dependencies', $capturedSql);
+        $this->assertStringContainsString('ksf_calendar_dependencies', $capturedSql);
     }
 
     // =========================================================================

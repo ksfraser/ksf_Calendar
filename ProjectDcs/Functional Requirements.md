@@ -300,7 +300,7 @@ This document defines the functional requirements for the ksf_Calendar module, p
 1. Lookup entry
 2. Create CalendarInvitee entity
 3. If resource: check availability, auto-accept if free
-4. INSERT row into fa_cal_invitees
+4. INSERT row into ksf_calendar_invitees
 
 **Priority**: High
 
@@ -321,7 +321,7 @@ This document defines the functional requirements for the ksf_Calendar module, p
 **Requirement**: The system shall soft-delete invitees.
 
 **Process**:
-1. Set inactive = 1 on fa_cal_invitees row
+1. Set inactive = 1 on ksf_calendar_invitees row
 
 **Priority**: High
 
@@ -333,7 +333,7 @@ This document defines the functional requirements for the ksf_Calendar module, p
 **Process**:
 1. Query crm_persons JOIN crm_contacts JOIN crm_categories
 2. Return one row per "hat" (contact_type) per matching person
-3. Optionally query fa_resources for matching resources
+3. Optionally query resources for matching resources
 4. Return JSON: [{contact_type, contact_id, name, email, phone, type_label}]
 
 **Priority**: Medium
@@ -354,7 +354,7 @@ This document defines the functional requirements for the ksf_Calendar module, p
 
 **Process**:
 1. Resolve user ID → crm_contacts.id via person registry
-2. Query fa_cal_invitees + fa_cal_entries where contact_id matches
+2. Query ksf_calendar_invitees + ksf_calendar_entries where contact_id matches
 3. Return entries with RSVP status
 
 **Priority**: Medium

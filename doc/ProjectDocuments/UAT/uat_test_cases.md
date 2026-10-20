@@ -179,7 +179,7 @@
 **Expected Result**:
 - Selected user appears in invitees list
 - User can search by name, email, contact type
-- Invitee row stored in fa_cal_invitees
+- Invitee row stored in ksf_calendar_invitees
 
 ---
 
@@ -196,7 +196,7 @@
 
 **Expected Result**:
 - Invitee removed from the entry
-- fa_cal_invitees row deleted or marked inactive
+- ksf_calendar_invitees row deleted or marked inactive
 - Other invitees unchanged
 
 ---
@@ -245,7 +245,7 @@
 2. Navigate to calendar with `viewable_by` filter (e.g. "My Invitations" view)
 
 **Expected Result**:
-- Only entries where user is invited (via fa_cal_invitees → crm_persons → crm_contacts) are shown
+- Only entries where user is invited (via ksf_calendar_invitees → crm_persons → crm_contacts) are shown
 - Non-invited entries are hidden
 - The two-legged person-registry JOIN works correctly
 
@@ -263,7 +263,7 @@
 - All entries where user is an invitee are displayed
 - Entries show "Invited" badge or indicator
 - User can respond (Accept/Decline/Tentative) to each invitation
-- Response status updates in fa_cal_invitees
+- Response status updates in ksf_calendar_invitees
 
 ---
 

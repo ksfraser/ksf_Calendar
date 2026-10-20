@@ -157,8 +157,8 @@ The ksf_Calendar module provides:
 
 | Table | Purpose |
 |-------|---------|
-| fa_cal_entries | Calendar entries |
-| fa_cal_sources | Calendar source configuration |
+| ksf_calendar_entries | Calendar entries |
+| ksf_calendar_sources | Calendar source configuration |
 
 ---
 

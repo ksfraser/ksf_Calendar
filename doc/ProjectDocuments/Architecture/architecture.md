@@ -156,13 +156,13 @@ User clicks event detail panel → "Edit" button
 
 | Table | Purpose |
 |-------|---------|
-| fa_cal_entries | All calendar entries (unified) |
-| fa_cal_sources | Calendar views/subscriptions |
-| fa_cal_invitees | Invitees per entry with RSVP tracking |
+| ksf_calendar_entries | All calendar entries (unified) |
+| ksf_calendar_sources | Calendar views/subscriptions |
+| ksf_calendar_invitees | Invitees per entry with RSVP tracking |
 | 0_crm_persons (FA core) | Canonical person registry |
 | 0_crm_contacts (FA core) | Person-to-entity xref (user, customer, employee, etc.) |
 
-### fa_cal_invitees Schema (v1.3.0)
+### ksf_calendar_invitees Schema (v1.3.0)
 
 `contact_id` stores `0_crm_contacts.id` (INT) for person-registry types (`user`,
 `crm_contact`) and literal entity IDs for `resource` / `ad_hoc` types.
@@ -176,7 +176,7 @@ person-registry subquery to resolve invitee visibility:
 ```sql
 AND (assigned_to = ?
      OR id IN (
-         SELECT entry_id FROM fa_cal_invitees i
+         SELECT entry_id FROM ksf_calendar_invitees i
          JOIN crm_contacts ic ON ic.id = i.contact_id
          JOIN crm_contacts uc ON uc.person_id = ic.person_id
                               AND uc.type = 'user'

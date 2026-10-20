@@ -30,13 +30,13 @@ use Psr\Log\LoggerInterface;
 
 class CalendarService
 {
-    private const TABLE_ENTRIES       = 'fa_cal_entries';
-    private const TABLE_SOURCES       = 'fa_cal_sources';
-    private const TABLE_INVITEES      = 'fa_cal_invitees';
-    private const TABLE_DEPENDENCIES  = 'fa_cal_dependencies';
-    private const TABLE_ATTACHMENTS   = 'fa_cal_attachments';
-    private const TABLE_NOTIFICATIONS = 'fa_cal_notifications';
-    private const TABLE_OCCURRENCES  = 'fa_cal_event_occurrences';
+    private const TABLE_ENTRIES       = 'ksf_calendar_entries';
+    private const TABLE_SOURCES       = 'ksf_calendar_sources';
+    private const TABLE_INVITEES      = 'ksf_calendar_invitees';
+    private const TABLE_DEPENDENCIES  = 'ksf_calendar_dependencies';
+    private const TABLE_ATTACHMENTS   = 'ksf_calendar_attachments';
+    private const TABLE_NOTIFICATIONS = 'ksf_calendar_notifications';
+    private const TABLE_OCCURRENCES  = 'ksf_calendar_event_occurrences';
 
     /**
      * Default entry duration in minutes used when only one boundary is provided.
@@ -539,7 +539,7 @@ class CalendarService
             // Visibility subquery — resolves invitees via direct user match
             // or FA person registry.
             //
-            // fa_cal_invitees.contact_id stores:
+            // ksf_calendar_invitees.contact_id stores:
             //   - user type: the FA numeric user ID (e.g. "1") via TYPE_FA_USER
             //   - crm_contact type: crm_contacts.id (e.g. "42") via TYPE_CRM_CONTACT
             //
@@ -585,7 +585,7 @@ class CalendarService
         // belongs to someone else).  source_type and direction filters ARE applied so
         // per-type views remain correct.
         //
-        // fa_cal_invitees.contact_id stores:
+        // ksf_calendar_invitees.contact_id stores:
         //   - user type: the FA numeric user ID (e.g. "1") via TYPE_FA_USER
         //   - crm_contact type: crm_contacts.id (e.g. "42") via TYPE_CRM_CONTACT
         // The subquery handles both via an OR branch.
@@ -1356,10 +1356,10 @@ class CalendarService
      * hat, he appears twice — allowing the inviter to choose which role he
      * plays in this calendar event.
      *
-     * Resources (fa_resources) are also included when the module is installed.
+     * Resources (resources) are also included when the module is installed.
      *
      * Silently skips the person registry if crm_persons is unavailable.
-     * Silently skips resources if fa_resources is unavailable.
+     * Silently skips resources if resources is unavailable.
      *
      * When $contactTypes is non-empty, the person query is filtered to only
      * include rows whose cc.type matches the given types. This allows each
@@ -1495,7 +1495,7 @@ class CalendarService
         try {
             $resourceRows = $this->db->fetchAll(
                 "SELECT id, name, email, phone"
-                . " FROM fa_resources"
+                . " FROM resources"
                 . " WHERE (name LIKE ? OR email LIKE ?)"
                 . "   AND inactive = 0"
                 . " LIMIT ?",
@@ -1560,7 +1560,7 @@ class CalendarService
     /**
      * Soft-delete a dependency row.
      *
-     * @param int $dependencyId  The fa_cal_dependencies.id to remove
+     * @param int $dependencyId  The ksf_calendar_dependencies.id to remove
      * @return void
      * @throws CalendarException  If the row does not exist
      *
@@ -1969,7 +1969,7 @@ class CalendarService
      * Generate occurrence rows for a recurring entry.
      *
      * Parses the entry's recurrence_rule (iCal RRULE format) and inserts
-     * one row per occurrence into fa_cal_event_occurrences. Existing
+     * one row per occurrence into ksf_calendar_event_occurrences. Existing
      * occurrence rows with the same entry_id are replaced.
      *
      * @param CalendarEntry $entry  The recurring parent entry.
